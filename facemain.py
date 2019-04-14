@@ -1,8 +1,13 @@
 import facedata
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
 import torch
 import torch.nn as nn
+
+sns.set_style("darkgrid")
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class Linearize(nn.Module):
     """Convert four-dimensional image tensor into one suitable for linear layers."""
@@ -20,9 +25,12 @@ class Net(nn.Module):
             nn.Tanh(),
             nn.Conv2d(in_channels=8, out_channels=8, kernel_size=3),
             nn.MaxPool2d(2),
-            nn.ReLU(),
+            nn.LeakyReLU(0.1),
             Linearize(),
-            nn.Linear(8 * 23 * 23, 1)
+            nn.Linear(8 * 23 * 23, 64),
+            nn.LeakyReLU(0.1),
+            nn.Linear(64, 1),
+            nn.ReLU()
         )
 
     def forward(self, x):
@@ -30,39 +38,65 @@ class Net(nn.Module):
 
 def images_tensor(images):
     """Scale, transpose and convert Numpy tensor into Torch tensor."""
+    global device
     images = np.transpose(images, (0, 3, 2, 1))  # N, rgb, height, width
-    return torch.Tensor(images) / 128.0 - 1.0  # -1 to 1
+    return torch.Tensor(images, device=device) / 128.0 - 1.0  # -1 to 1
 
-# Initialize for learning
+def ages_tensor(ages):
+    return torch.tensor(ages.reshape(-1, 1).astype(np.float32), device=device)
+
+#%% Initialize training
 net = Net()
+try:
+    net.load_state_dict(torch.load("agenet2.pth"))
+    print("Loaded agenet.pth")
+except:
+    print("Initialized agenet")
+net.to(device)
 criterion = nn.MSELoss()
-optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
-rounds = range(100)
-losses = np.zeros(len(rounds))
+training_N = facedata.N - 1000
+stats = []
 
+#%% Training epoch
+optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
+minibatch_size = 64
+minirounds = range(2)
+rounds = range(training_N // minibatch_size)
+print_stats = np.linspace(rounds[0], rounds[-1], 15, dtype=np.int)
+losses = np.full(len(rounds), np.nan)
+stats.append(losses)
 for r in rounds:
     # Import a batch of data
-    batch = np.random.choice(facedata.N - 100, 32)
-    ages = torch.tensor(facedata.ages[batch, np.newaxis], dtype=torch.float)
+    batch = r * minibatch_size + np.arange(minibatch_size)
+    ages = ages_tensor(facedata.ages[batch])
     images = images_tensor(facedata.images[batch])
+    batch = (batch + minibatch_size) % training_N
     # Optimize network
-    optimizer.zero_grad()
-    output = net(images)
-    loss = criterion(output, ages)
-    loss.backward()
-    optimizer.step()
+    for r2 in minirounds:
+        optimizer.zero_grad()
+        output = net(images)
+        loss = criterion(output, ages)
+        loss.backward()
+        optimizer.step()
+    losses[r] = loss.item() ** .5
     # Statistics
-    losses[r] = loss.item()
-    if r in np.linspace(rounds[0], rounds[-1], 10, dtype=np.int):
-        print(f"{r:4d}/{rounds[-1]} loss={loss.item():.0f}")
-        plt.plot(losses)
-        plt.ylim(0, 1000)
-        plt.show()
+    if r in print_stats:
+        print(f"{r+1:4d}/{len(rounds)} {batch[0]:5d}/{training_N} » stddev {losses[r]:.0f} years")
+        if r is not print_stats[0]:
+            for ls in stats: plt.plot(ls)
+            plt.ylim(0, 30)
+            plt.show()
 
-# Do a test run
-batch = facedata.N - 100 + np.random.choice(100, 5 * 4)
-output = net(images_tensor(facedata.images[batch]))
-fig, axes = plt.subplots(4, 5, figsize=(20, 16))
+#%% Do a test run
+cols, rows = 5, 4
+batch = np.random.choice(range(training_N, facedata.N), cols * rows, replace=False)
+with torch.no_grad():
+    output = net(images_tensor(facedata.images[batch]))
+    loss = criterion(output, ages_tensor(facedata.ages[batch]))
+    print(f"Validation stddev {loss.item()**.5:.0f} years")
+
+# Show the results
+fig, axes = plt.subplots(rows, cols, figsize=(cols * 3, rows * 3))
 for i, idx in enumerate(batch):
     out = output[i, 0].item()
     image = facedata.images[idx]
@@ -72,6 +106,12 @@ for i, idx in enumerate(batch):
 
     ax = axes.flat[i]
     ax.imshow(facedata.images[idx])
-    ax.set_title(f"out={out:.0f} for {age} year old {race.name} {gender}")
+    ax.grid(False)
+    ax.set_yticklabels([])
+    ax.set_xticklabels([])
+    ax.set_title(f"{out:.0f} ~ {age} year {race.name} {gender}")
 
 plt.show()
+
+#%% Save current state
+torch.save(net.state_dict(), "agenet.pth"); print("Saved to agenet.pth")

@@ -6,6 +6,7 @@ import re
 
 filenames = glob("UTKFace/*.jpg")
 N = len(filenames)
+assert N > 0, "Data files not found in UTKFace/*.jpg!"
 images = np.empty((N, 200, 200, 3), dtype=np.uint8)
 ages = np.empty(N, dtype=np.uint8)
 genders = np.empty(N, dtype=np.bool)
@@ -27,7 +28,11 @@ def _errorfix(filename):
     ):
         if fix[0] in filename: return fix
 
+# Shuffle the files' order
+np.random.seed(0)
+np.random.shuffle(filenames)
 
+# Import data from filenames and images
 for i, n in enumerate(filenames):
     m = re.match(r".*/(\d*)_(\d*)_(\d*)_[^/]*", n) or _errorfix(n)
     ages[i], genders[i], races[i] = int(m[1]), int(m[2]), int(m[3])
