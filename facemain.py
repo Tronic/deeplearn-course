@@ -39,8 +39,9 @@ class Net(nn.Module):
 def images_tensor(images):
     """Scale, transpose and convert Numpy tensor into Torch tensor."""
     global device
+    images = images.astype(np.float32)
     images = np.transpose(images, (0, 3, 2, 1))  # N, rgb, height, width
-    return torch.Tensor(images, device=device) / 128.0 - 1.0  # -1 to 1
+    return torch.tensor(images, device=device) / 128.0 - 1.0  # -1 to 1
 
 def ages_tensor(ages):
     return torch.tensor(ages.reshape(-1, 1).astype(np.float32), device=device)
@@ -65,27 +66,31 @@ rounds = range(training_N // minibatch_size)
 print_stats = np.linspace(rounds[0], rounds[-1], 15, dtype=np.int)
 losses = np.full(len(rounds), np.nan)
 stats.append(losses)
-for r in rounds:
-    # Import a batch of data
-    batch = r * minibatch_size + np.arange(minibatch_size)
-    ages = ages_tensor(facedata.ages[batch])
-    images = images_tensor(facedata.images[batch])
-    batch = (batch + minibatch_size) % training_N
-    # Optimize network
-    for r2 in minirounds:
-        optimizer.zero_grad()
-        output = net(images)
-        loss = criterion(output, ages)
-        loss.backward()
-        optimizer.step()
-    losses[r] = loss.item() ** .5
-    # Statistics
-    if r in print_stats:
-        print(f"{r+1:4d}/{len(rounds)} {batch[0]:5d}/{training_N} » stddev {losses[r]:.0f} years")
-        if r is not print_stats[0]:
-            for ls in stats: plt.plot(ls)
-            plt.ylim(0, 30)
-            plt.show()
+n_epochs = 10
+
+for e in range(n_epochs):
+    for r in rounds:
+        # Import a batch of data
+        batch = r * minibatch_size + np.arange(minibatch_size)
+        ages = ages_tensor(facedata.ages[batch])
+        images = images_tensor(facedata.images[batch])
+        batch = (batch + minibatch_size) % training_N
+        # Optimize network
+        for r2 in minirounds:
+            optimizer.zero_grad()
+            output = net(images)
+            loss = criterion(output, ages)
+            loss.backward()
+            optimizer.step()
+        losses[r] = loss.item() ** .5
+
+        # Statistics
+        if r in print_stats:
+            print(f"{r+1:4d}/{len(rounds)} {batch[0]:5d}/{training_N} » stddev {losses[r]:.0f} years")
+            if r is not print_stats[0]:
+                for ls in stats: plt.plot(ls)
+                plt.ylim(0, 30)
+                #plt.show()
 
 #%% Do a test run
 cols, rows = 5, 4
