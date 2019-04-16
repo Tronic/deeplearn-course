@@ -54,14 +54,17 @@ class Discriminator(nn.Module):
     def forward(self, faces):
         return self.seq(faces)
 
+# How many random numbers are fed to generator
+zdim = 10
 
 class Generator(nn.Module):
     """Convolutional generator adapted from DCGAN by Radford et al."""
     def __init__(self):
+        global zdim
         super().__init__()
         CH = 512
         self.seq = nn.Sequential(
-            nn.Linear(100, CH * 4 * 4),
+            nn.Linear(zdim, CH * 4 * 4),
             nn.BatchNorm1d(CH * 4 * 4),
             Reshape(CH, 4, 4),
             nn.ConvTranspose2d(in_channels=CH, out_channels=CH // 2, kernel_size=4, stride=2),
@@ -85,7 +88,7 @@ discriminator = Discriminator()
 generator = Generator()
 
 assert discriminator(torch.zeros(10, 3, 100, 100)).shape == torch.Size((10, 1))
-assert generator(torch.zeros(10, 100)).shape == torch.Size((10, 3, 100, 100))
+assert generator(torch.zeros(10, zdim)).shape == torch.Size((10, 3, 100, 100))
 
 try:
     discriminator.load_state_dict(torch.load("discriminator.pth"))
@@ -112,11 +115,12 @@ print(f"Training with {len(rounds)} rounds per epoch:")
 for e in epochs:
     d_rounds = g_rounds = 0
     for r in rounds:
+        print(f"  [{'*' * (40 * r // len(rounds)):40s}]", end="\r")
         # Run the discriminator on real and fake data
-        batch = slice(r * minibatch_size, (r + 1) * minibatch_size)
+        batch = np.random.choice(facedata.N, minibatch_size, replace=False)
         real = images[batch].to(torch.float32) / 255.0
         with torch.no_grad():
-            fake = generator(torch.randn((minibatch_size, 100), device=device))
+            fake = generator(torch.randn((minibatch_size, zdim), device=device))
         d_optimizer.zero_grad()
         data = torch.cat((real, fake), dim=0)
         output = discriminator(data)
@@ -132,7 +136,7 @@ for e in epochs:
         # Train the generator only if the discriminator works
         if realout - fakeout > 0.4:
             g_optimizer.zero_grad()
-            fake = generator(torch.randn((minibatch_size, 100), device=device))
+            fake = generator(torch.randn((minibatch_size, zdim), device=device))
             loss = criterion(discriminator(fake), targets_real)
             loss.backward()
             g_optimizer.step()
@@ -140,7 +144,7 @@ for e in epochs:
     print(f"  Epoch {e+1:2d}/{len(epochs)}   {d_rounds:4d}×D {g_rounds:4d}×G » real {realout:3.0%} vs. fake {fakeout:3.0%}")
     # Show the results
     cols, rows = 4, 8  # 2 * minibatch_size
-    fig, axes = plt.subplots(rows, cols, figsize=(cols * 1.2, rows * 1.2))
+    fig, axes = plt.subplots(rows, cols, figsize=(cols * 2, rows * 2))
     for i, ax in enumerate(axes.flat):
         ax.imshow(data[i].cpu().permute(1, 2, 0))
         ax.grid(False)
@@ -152,4 +156,4 @@ for e in epochs:
 #%% Save current state
 torch.save(generator.state_dict(), "generator.pth")
 torch.save(discriminator.state_dict(), "discriminator.pth")
-
+print("Saved to generator.pth and discriminator.pth!")
