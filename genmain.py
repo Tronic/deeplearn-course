@@ -56,23 +56,24 @@ class Discriminator(nn.Module):
 
 
 class Generator(nn.Module):
-    """Compose 200x200x3 face images out of random numbers."""
+    """Convolutional generator adapted from DCGAN by Radford et al."""
     def __init__(self):
         super().__init__()
+        CH = 512
         self.seq = nn.Sequential(
-            nn.Linear(100, 1024 * 4 * 4),
-            nn.BatchNorm1d(1024 * 4 * 4),
-            Reshape(1024, 4, 4),
-            nn.ConvTranspose2d(in_channels=1024, out_channels=512, kernel_size=4, stride=2),
-            nn.BatchNorm2d(512),
+            nn.Linear(100, CH * 4 * 4),
+            nn.BatchNorm1d(CH * 4 * 4),
+            Reshape(CH, 4, 4),
+            nn.ConvTranspose2d(in_channels=CH, out_channels=CH // 2, kernel_size=4, stride=2),
+            nn.BatchNorm2d(CH // 2),
             nn.Tanh(),
-            nn.ConvTranspose2d(in_channels=512, out_channels=256, kernel_size=4, stride=2),
-            nn.BatchNorm2d(256),
+            nn.ConvTranspose2d(in_channels=CH // 2, out_channels=CH // 4, kernel_size=4, stride=2),
+            nn.BatchNorm2d(CH // 4),
             nn.Tanh(),
-            nn.ConvTranspose2d(in_channels=256, out_channels=128, kernel_size=4, stride=2, dilation=2),
-            nn.BatchNorm2d(128),
+            nn.ConvTranspose2d(in_channels=CH // 4, out_channels=CH // 8, kernel_size=4, stride=2, dilation=2),
+            nn.BatchNorm2d(CH // 8),
             nn.Tanh(),
-            nn.ConvTranspose2d(in_channels=128, out_channels=3, kernel_size=4, stride=2),
+            nn.ConvTranspose2d(in_channels=CH // 8, out_channels=3, kernel_size=4, stride=2),
             nn.Sigmoid()
         )
 
@@ -86,67 +87,69 @@ generator = Generator()
 assert discriminator(torch.zeros(10, 3, 100, 100)).shape == torch.Size((10, 1))
 assert generator(torch.zeros(10, 100)).shape == torch.Size((10, 3, 100, 100))
 
+try:
+    discriminator.load_state_dict(torch.load("discriminator.pth"))
+    generator.load_state_dict(torch.load("generator.pth"))
+    print("Networks loaded")
+except:
+    pass
+
 generator.to(device)
 discriminator.to(device)
 
-# net.load_state_dict(torch.load("agenet.pth"))
-
-criterion = nn.BCELoss()
-stats = []
-
 #%% Training epochs
-d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=0.001)
-g_optimizer = torch.optim.Adam(generator.parameters(), lr=0.001)
-minibatch_size = 32
-rounds = range(facedata.N // minibatch_size // 100)
-epochs = range(20 if device.type == "cuda" else 2)
+d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=0.001, weight_decay=1e-3)
+g_optimizer = torch.optim.Adam(generator.parameters(), lr=0.0002)
+criterion = nn.BCELoss()
+minibatch_size = 16
+rounds = range(facedata.N // minibatch_size)
+epochs = range(5)
 targets_real = torch.ones((minibatch_size, 1), device=device)
 targets_fake = torch.zeros((minibatch_size, 1), device=device)
 targets = torch.cat((targets_real, targets_fake), dim=0)
 
+print(f"Training with {len(rounds)} rounds per epoch:")
 for e in epochs:
-    stats.append(np.empty(len(rounds)))
+    d_rounds = g_rounds = 0
     for r in rounds:
-        # Train the discriminator
+        # Run the discriminator on real and fake data
         batch = slice(r * minibatch_size, (r + 1) * minibatch_size)
         real = images[batch].to(torch.float32) / 255.0
         with torch.no_grad():
             fake = generator(torch.randn((minibatch_size, 100), device=device))
         d_optimizer.zero_grad()
-        output = discriminator(torch.cat((real, fake), dim=0))
-        loss = criterion(output, targets)
-        loss.backward()
-        d_optimizer.step()
-        stats[-1][r] = loss.item()
-        # Train the generator
-        g_optimizer.zero_grad()
-        fake = generator(torch.randn((minibatch_size, 100), device=device))
-        output = discriminator(fake)
-        loss = criterion(output, targets_real)
-        loss.backward()
-        g_optimizer.step()
-
-    # Statistics
-    print(f"Epoch {e+1:2d}/{len(epochs)} » loss {stats[-1].mean():.2f}")
-    for losses in stats: plt.plot(losses)
-    plt.show(block=False)
-
-#%% Do a test run
-cols, rows = 5, 4
-with torch.no_grad():
-    fake = generator(torch.randn((cols * rows, 100), device=device))
-    output = discriminator(fake)
-
-# Show the results
-fig, axes = plt.subplots(rows, cols, figsize=(cols * 3, rows * 3))
-for i, ax in enumerate(axes.flat):
-    ax.imshow(fake[i].cpu().transpose(0, 2))
-    ax.grid(False)
-    ax.set_yticklabels([])
-    ax.set_xticklabels([])
-    ax.set_title(f"{output[i, 0]:.0%} real")
-
-plt.show()
+        data = torch.cat((real, fake), dim=0)
+        output = discriminator(data)
+        # Check levels
+        realout = output[:minibatch_size].mean().item()
+        fakeout = output[minibatch_size:].mean().item()
+        # Train the discriminator only if it is not too good
+        if realout - fakeout < 0.6:
+            loss = criterion(output, targets)
+            loss.backward()
+            d_optimizer.step()
+            d_rounds += 1
+        # Train the generator only if the discriminator works
+        if realout - fakeout > 0.4:
+            g_optimizer.zero_grad()
+            fake = generator(torch.randn((minibatch_size, 100), device=device))
+            loss = criterion(discriminator(fake), targets_real)
+            loss.backward()
+            g_optimizer.step()
+            g_rounds += 1
+    print(f"  Epoch {e+1:2d}/{len(epochs)}   {d_rounds:4d}×D {g_rounds:4d}×G » real {realout:3.0%} vs. fake {fakeout:3.0%}")
+    # Show the results
+    cols, rows = 4, 8  # 2 * minibatch_size
+    fig, axes = plt.subplots(rows, cols, figsize=(cols * 1.2, rows * 1.2))
+    for i, ax in enumerate(axes.flat):
+        ax.imshow(data[i].cpu().permute(1, 2, 0))
+        ax.grid(False)
+        ax.set_yticklabels([])
+        ax.set_xticklabels([])
+        ax.set_title(f"{output[i, 0]:.0%} real")
+    plt.show()
 
 #%% Save current state
-torch.save(net.state_dict(), "agenet.pth"); print("Saved to agenet.pth")
+torch.save(generator.state_dict(), "generator.pth")
+torch.save(discriminator.state_dict(), "discriminator.pth")
+
