@@ -7,6 +7,7 @@ import re
 filenames = glob("UTKFace/*.jpg")
 N = len(filenames)
 assert N > 0, "Data files not found in UTKFace/*.jpg!"
+print(f"Loading {N} UTKFace images")
 images = np.empty((N, 200, 200, 3), dtype=np.uint8)
 ages = np.empty(N, dtype=np.uint8)
 genders = np.empty(N, dtype=np.bool)

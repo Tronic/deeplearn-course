@@ -5,9 +5,26 @@ import seaborn as sns
 import torch
 import torch.nn as nn
 
-sns.set_style("darkgrid")
+#%% Setup
+
+sns.set_style("darkgrid")  # Make pyplot look better
+
+def images_tensor(images):
+    """Scale, transpose and convert Numpy tensor into Torch tensor."""
+    global device
+    images = np.transpose(images, (0, 3, 1, 2))  # N, rgb, height, width
+    return torch.tensor(images, device=device, dtype=torch.uint8)
+
+def ages_tensor(ages):
+    global device
+    return torch.tensor(ages.reshape(-1, 1).astype(np.float32), device=device)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print("Uploading tensors to", device)
+ages = ages_tensor(facedata.ages)
+images = images_tensor(facedata.images)
+
+#%% Network definition
 
 class Linearize(nn.Module):
     """Convert four-dimensional image tensor into one suitable for linear layers."""
@@ -30,25 +47,15 @@ class Net(nn.Module):
             nn.Linear(8 * 23 * 23, 64),
             nn.LeakyReLU(0.1),
             nn.Linear(64, 1),
-            nn.ReLU()
         )
 
     def forward(self, x):
-        return self.seq(x)
-
-def images_tensor(images):
-    """Scale, transpose and convert Numpy tensor into Torch tensor."""
-    global device
-    images = np.transpose(images, (0, 3, 2, 1))  # N, rgb, height, width
-    return torch.Tensor(images, device=device) / 128.0 - 1.0  # -1 to 1
-
-def ages_tensor(ages):
-    return torch.tensor(ages.reshape(-1, 1).astype(np.float32), device=device)
+        return self.seq(x.to(torch.float32) / 128.0 - 1.0)
 
 #%% Initialize training
 net = Net()
 try:
-    net.load_state_dict(torch.load("agenet2.pth"))
+    net.load_state_dict(torch.load("agenet.pth"))
     print("Loaded agenet.pth")
 except:
     print("Initialized agenet")
@@ -57,43 +64,37 @@ criterion = nn.MSELoss()
 training_N = facedata.N - 1000
 stats = []
 
-#%% Training epoch
+#%% Training epochs
 optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
-minibatch_size = 64
-minirounds = range(2)
+minibatch_size = 32
 rounds = range(training_N // minibatch_size)
-print_stats = np.linspace(rounds[0], rounds[-1], 15, dtype=np.int)
-losses = np.full(len(rounds), np.nan)
-stats.append(losses)
-for r in rounds:
-    # Import a batch of data
-    batch = r * minibatch_size + np.arange(minibatch_size)
-    ages = ages_tensor(facedata.ages[batch])
-    images = images_tensor(facedata.images[batch])
-    batch = (batch + minibatch_size) % training_N
-    # Optimize network
-    for r2 in minirounds:
+epochs = range(20)
+
+for e in epochs:
+    stats.append(np.empty(len(rounds)))
+    for r in rounds:
+        batch = slice(r * minibatch_size, (r + 1) * minibatch_size)
+        # Optimize network for minibatch
         optimizer.zero_grad()
-        output = net(images)
-        loss = criterion(output, ages)
+        output = net(images[batch])
+        loss = criterion(output, ages[batch])
         loss.backward()
         optimizer.step()
-    losses[r] = loss.item() ** .5
+        stats[-1][r] = loss.item() ** .5
+
     # Statistics
-    if r in print_stats:
-        print(f"{r+1:4d}/{len(rounds)} {batch[0]:5d}/{training_N} » stddev {losses[r]:.0f} years")
-        if r is not print_stats[0]:
-            for ls in stats: plt.plot(ls)
-            plt.ylim(0, 30)
-            plt.show()
+    print(f"Epoch {e+1:2d}/{len(epochs)} » stddev {stats[-1].mean():.1f} years")
+    for losses in stats: plt.plot(losses)
+    plt.ylim(0, 20)
+    plt.show(block=False)
 
 #%% Do a test run
 cols, rows = 5, 4
 batch = np.random.choice(range(training_N, facedata.N), cols * rows, replace=False)
 with torch.no_grad():
-    output = net(images_tensor(facedata.images[batch]))
-    loss = criterion(output, ages_tensor(facedata.ages[batch]))
-    print(f"Validation stddev {loss.item()**.5:.0f} years")
+    output = net(images[batch])
+    loss = criterion(output, ages[batch])
+    print(f"Validation stddev {loss.item()**.5:.1f} years")
 
 # Show the results
 fig, axes = plt.subplots(rows, cols, figsize=(cols * 3, rows * 3))
