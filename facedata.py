@@ -3,12 +3,12 @@ from glob import glob
 from PIL import Image
 import numpy as np
 import re
+from concurrent.futures import ThreadPoolExecutor
 
 filenames = glob("UTKFace/*.jpg")
 N = len(filenames)
 assert N > 0, "Data files not found in UTKFace/*.jpg!"
 print(f"Loading {N} UTKFace images")
-images = np.empty((N, 200, 200, 3), dtype=np.uint8)
 ages = np.empty(N, dtype=np.uint8)
 genders = np.empty(N, dtype=np.bool)
 races = np.empty(N, dtype=np.uint8)
@@ -33,8 +33,11 @@ def _errorfix(filename):
 np.random.seed(0)
 np.random.shuffle(filenames)
 
-# Import data from filenames and images
+# Read labels from filenames
 for i, n in enumerate(filenames):
     m = re.match(r".*/(\d*)_(\d*)_(\d*)_[^/]*", n) or _errorfix(n)
     ages[i], genders[i], races[i] = int(m[1]), int(m[2]), int(m[3])
-    images[i] = np.array(Image.open(n))
+
+# Load JPEGs into Numpy array using multiple threads
+with ThreadPoolExecutor() as exec:
+    images = list(exec.map(lambda n: np.array(Image.open(n)), filenames))
