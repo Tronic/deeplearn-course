@@ -55,14 +55,14 @@ class Discriminator(nn.Module):
         return self.seq(faces)
 
 # How many random numbers are fed to generator
-zdim = 10
+zdim = 1000
 
 class Generator(nn.Module):
     """Convolutional generator adapted from DCGAN by Radford et al."""
     def __init__(self):
         global zdim
         super().__init__()
-        CH = 512
+        CH = 1024
         self.seq = nn.Sequential(
             nn.Linear(zdim, CH * 4 * 4),
             nn.BatchNorm1d(CH * 4 * 4),
@@ -76,7 +76,10 @@ class Generator(nn.Module):
             nn.ConvTranspose2d(in_channels=CH // 4, out_channels=CH // 8, kernel_size=4, stride=2, dilation=2),
             nn.BatchNorm2d(CH // 8),
             nn.Tanh(),
-            nn.ConvTranspose2d(in_channels=CH // 8, out_channels=3, kernel_size=4, stride=2),
+            nn.ConvTranspose2d(in_channels=CH // 8, out_channels=CH // 16, kernel_size=4, stride=2),
+            nn.BatchNorm2d(CH // 16),
+            nn.Tanh(),
+            nn.ConvTranspose2d(in_channels=CH // 16, out_channels=3, kernel_size=3, padding=1),
             nn.Sigmoid()
         )
 
@@ -115,7 +118,7 @@ print(f"Training with {len(rounds)} rounds per epoch:")
 for e in epochs:
     d_rounds = g_rounds = 0
     for r in rounds:
-        print(f"  [{'*' * (40 * r // len(rounds)):40s}]", end="\r")
+        print(f"  [{'*' * (30 * r // rounds[-1]):30s}] {r+1:4d}/{len(rounds)}", end="\r")
         # Run the discriminator on real and fake data
         batch = np.random.choice(facedata.N, minibatch_size, replace=False)
         real = images[batch].to(torch.float32) / 255.0
