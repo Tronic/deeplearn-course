@@ -68,29 +68,23 @@ class Generator(nn.Module):
             Reshape(CH, 4, 4),
             nn.BatchNorm2d(CH),
             nn.Tanh(),
-            nn.Upsample(scale_factor=2),
-            nn.ConvTranspose2d(in_channels=CH, out_channels=CH // 2, kernel_size=3, padding=1, bias=False),
+            nn.ConvTranspose2d(in_channels=CH, out_channels=CH // 2, kernel_size=6, padding=1, stride=2, bias=False),
             nn.BatchNorm2d(CH // 2),
             nn.Tanh(),
-            nn.Upsample(scale_factor=2),
-            nn.ConvTranspose2d(in_channels=CH // 2, out_channels=CH // 4, kernel_size=3, padding=1, bias=False),
+            nn.ConvTranspose2d(in_channels=CH // 2, out_channels=CH // 4, kernel_size=6, padding=1, stride=2, bias=False),
             nn.BatchNorm2d(CH // 4),
             nn.Tanh(),
-            nn.Upsample(scale_factor=2),
-            nn.ConvTranspose2d(in_channels=CH // 4, out_channels=CH // 8, kernel_size=3, padding=1, bias=False),
+            nn.ConvTranspose2d(in_channels=CH // 4, out_channels=CH // 8, kernel_size=6, padding=1, stride=2, bias=False),
             nn.BatchNorm2d(CH // 8),
             nn.Tanh(),
-            nn.Upsample(scale_factor=2),
-            nn.ConvTranspose2d(in_channels=CH // 8, out_channels=CH // 16, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(CH // 16),
-            nn.Tanh(),
-            nn.Upsample(scale_factor=100/64),
-            nn.ConvTranspose2d(in_channels=CH // 16, out_channels=3, kernel_size=5, padding=2, bias=False),
+            nn.ConvTranspose2d(in_channels=CH // 8, out_channels=3, kernel_size=6, padding=1, stride=2, bias=False),
+            nn.BatchNorm2d(3),
             nn.Sigmoid()
         )
 
     def forward(self, x):
-        return self.seq(x)
+        x = self.seq(x)
+        return nn.functional.interpolate(x, scale_factor=100/x.size(-1), mode="bilinear", align_corners=False)
 
 g_output = Generator()(torch.zeros(10, zdim))
 assert g_output.shape == torch.Size((10, 3, 100, 100)), f"Generator output {g_output.shape}"
@@ -114,7 +108,7 @@ generator.to(device)
 discriminator.to(device)
 
 #%% Training epochs
-d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=0.001, betas=(.5, .999), weight_decay=1e-4)
+d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=0.001, betas=(.5, .999))
 g_optimizer = torch.optim.Adam(generator.parameters(), lr=0.0002, betas=(.5, .999))
 criterion = nn.BCEWithLogitsLoss()
 minibatch_size = 24
