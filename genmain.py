@@ -55,7 +55,7 @@ class Discriminator(nn.Module):
         return self.seq(faces)
 
 # How many random numbers are fed to generator
-zdim = 100
+zdim = 3
 
 class Generator(nn.Module):
     """Convolutional generator adapted from DCGAN by Radford et al."""
