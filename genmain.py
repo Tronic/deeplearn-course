@@ -112,7 +112,7 @@ d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=0.001, betas=(.5, 
 g_optimizer = torch.optim.Adam(generator.parameters(), lr=0.0002, betas=(.5, .999))
 criterion = nn.BCEWithLogitsLoss()
 minibatch_size = 24
-rounds = range(facedata.N // minibatch_size)
+rounds = range(facedata.N // minibatch_size if device.type == "cuda" else 10)
 epochs = range(50)
 ones = torch.ones((minibatch_size, 1), device=device)
 zeros = torch.zeros((minibatch_size, 1), device=device)
