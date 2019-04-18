@@ -68,31 +68,40 @@ class Generator(nn.Module):
             Reshape(CH, 4, 4),
             nn.BatchNorm2d(CH),
             nn.Tanh(),
-            nn.ConvTranspose2d(in_channels=CH, out_channels=CH // 2, kernel_size=4, stride=2, bias=False),
+            nn.Upsample(scale_factor=2),
+            nn.ConvTranspose2d(in_channels=CH, out_channels=CH // 2, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(CH // 2),
             nn.Tanh(),
-            nn.ConvTranspose2d(in_channels=CH // 2, out_channels=CH // 4, kernel_size=4, stride=2, bias=False),
+            nn.Upsample(scale_factor=2),
+            nn.ConvTranspose2d(in_channels=CH // 2, out_channels=CH // 4, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(CH // 4),
             nn.Tanh(),
-            nn.ConvTranspose2d(in_channels=CH // 4, out_channels=CH // 8, kernel_size=4, stride=2, dilation=2, bias=False),
+            nn.Upsample(scale_factor=2),
+            nn.ConvTranspose2d(in_channels=CH // 4, out_channels=CH // 8, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(CH // 8),
             nn.Tanh(),
-            nn.ConvTranspose2d(in_channels=CH // 8, out_channels=3, kernel_size=4, stride=2, bias=False),
+            nn.Upsample(scale_factor=2),
+            nn.ConvTranspose2d(in_channels=CH // 8, out_channels=CH // 16, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(CH // 16),
+            nn.Tanh(),
+            nn.Upsample(scale_factor=100/64),
+            nn.ConvTranspose2d(in_channels=CH // 16, out_channels=3, kernel_size=5, padding=2, bias=False),
             nn.Sigmoid()
         )
 
     def forward(self, x):
         return self.seq(x)
 
+g_output = Generator()(torch.zeros(10, zdim))
+assert g_output.shape == torch.Size((10, 3, 100, 100)), f"Generator output {g_output.shape}"
+d_output = Discriminator()(g_output)
+assert d_output.shape == torch.Size((10, 1)), f"Discriminator output {d_output.shape}"
+del g_output, d_output
+
+
 #%% Init GAN
 discriminator = Discriminator()
 generator = Generator()
-
-g_output = generator(torch.zeros(10, zdim))
-d_output = discriminator(g_output)
-assert g_output.shape == torch.Size((10, 3, 100, 100)), f"Generator output {g_output.shape}"
-assert d_output.shape == torch.Size((10, 1)), f"Discriminator output {d_output.shape}"
-del g_output, d_output
 
 try:
     discriminator.load_state_dict(torch.load("discriminator.pth"))
@@ -120,8 +129,10 @@ for e in epochs:
     rtimer = time.perf_counter()
     for r in rounds:
         print(f"  [{'*' * (25 * r // rounds[-1]):25s}] {r+1:4d}/{len(rounds)} {(time.perf_counter() - rtimer) / (r + .1) * len(rounds):3.0f} s/epoch", end="\r")
+        # Choose a random slice of images
+        batch = np.random.randint(facedata.N - minibatch_size)
+        batch = slice(batch, batch + minibatch_size)
         # Run the discriminator on real and fake data
-        batch = slice(r * minibatch_size, (r + 1) * minibatch_size)
         real = images[batch].to(torch.float32)
         real /= 255.0
         d_optimizer.zero_grad()
@@ -177,7 +188,7 @@ def mix(a, b, x):
     return a * (1 - x) + b * x
 
 
-points = torch.randn((4, 1, zdim))
+points = 3 * torch.randn((4, 1, zdim))
 cols, rows = 6, 6
 fig, axes = plt.subplots(rows, cols, figsize=(cols * 2, rows * 2))
 for x in range(cols):
