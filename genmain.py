@@ -106,12 +106,11 @@ discriminator.to(device)
 d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=0.001, betas=(.5, .999), weight_decay=1e-3)
 g_optimizer = torch.optim.Adam(generator.parameters(), lr=0.0002, betas=(.5, .999))
 criterion = nn.BCEWithLogitsLoss()
-minibatch_size = 16
+minibatch_size = 24
 rounds = range(facedata.N // minibatch_size)
 epochs = range(50)
-targets_real = torch.ones((minibatch_size, 1), device=device)
-targets_fake = torch.zeros((minibatch_size, 1), device=device)
-targets = torch.cat((targets_real, targets_fake), dim=0)
+ones = torch.ones((minibatch_size, 1), device=device)
+zeros = torch.zeros((minibatch_size, 1), device=device)
 
 import time
 
@@ -134,8 +133,9 @@ print(f"Training with {len(rounds)} rounds per epoch:")
 timer = Timer()
 for e in epochs:
     d_rounds = g_rounds = 0
+    rtimer = time.perf_counter()
     for r in rounds:
-        print(f"  [{'*' * (30 * r // rounds[-1]):30s}] {r+1:4d}/{len(rounds)}", end="\r")
+        print(f"  [{'*' * (30 * r // rounds[-1]):30s}] {r+1:4d}/{len(rounds)} {(time.perf_counter() - rtimer) / (r + .1) * len(rounds):4.0f} s/epoch", end="\r")
         # Run the discriminator on real and fake data
         timer("batch load")
         batch = slice(r * minibatch_size, (r + 1) * minibatch_size)
@@ -143,16 +143,14 @@ for e in epochs:
         real /= 255.0
         timer("update init")
         d_optimizer.zero_grad()
-        timer("random")
         z = torch.randn((minibatch_size, zdim), device=device)
         timer("fake")
-        with torch.no_grad():
-            fake = generator(z)
-        output_fake = discriminator(fake)
+        fake = generator(z)
+        output_fake = discriminator(fake.detach())
         timer("real")
         output_real = discriminator(real)
         # Check levels (only every few rounds because it is slow)
-        if r % 10 == 0 or r == rounds[-1]:
+        if r % 30 == 0 or r == rounds[-1]:
             timer("levels")
             realout = output_real.detach().cpu().numpy().reshape(minibatch_size)
             fakeout = output_fake.detach().cpu().numpy().reshape(minibatch_size)
@@ -162,17 +160,15 @@ for e in epochs:
         # Train the discriminator only if it is not too good
         if diff < 0.8:
             timer("d update")
-            criterion(output_real, targets_real).backward()
-            criterion(output_fake, targets_fake).backward()
+            criterion(output_real, ones).backward()
+            criterion(output_fake, zeros).backward()
             d_optimizer.step()
             d_rounds += 1
         # Train the generator only if the discriminator works
         if diff > 0.2:
             timer("g update")
             g_optimizer.zero_grad()
-            fake = generator(z)
-            output_fake = discriminator(fake)
-            criterion(output_fake, targets_real).backward()
+            criterion(discriminator(fake), ones).backward()
             g_optimizer.step()
             g_rounds += 1
         timer(None)
