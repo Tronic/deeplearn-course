@@ -101,8 +101,8 @@ discriminator = Discriminator()
 generator = Generator()
 
 try:
-    discriminator.load_state_dict(torch.load("discriminator.pth"))
-    generator.load_state_dict(torch.load("generator.pth"))
+    discriminator.load_state_dict(torch.load("discriminator.pth", map_location=lambda storage, location: storage))
+    generator.load_state_dict(torch.load("generator.pth", map_location=lambda storage, location: storage))
     print("Networks loaded")
 except:
     pass
