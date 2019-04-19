@@ -39,15 +39,15 @@ class Discriminator(nn.Module):
     def __init__(self):
         super().__init__()
         self.seq = nn.Sequential(
-            nn.Conv2d(in_channels=3, out_channels=8, kernel_size=3),
+            nn.Conv2d(in_channels=3, out_channels=16, kernel_size=6),
             nn.MaxPool2d(2),
-            nn.LeakyReLU(0.2),
-            nn.Conv2d(in_channels=8, out_channels=8, kernel_size=3),
+            nn.LeakyReLU(0.1),
+            nn.Conv2d(in_channels=16, out_channels=32, kernel_size=6),
             nn.MaxPool2d(2),
-            nn.LeakyReLU(0.2),
+            nn.LeakyReLU(0.1),
             Reshape(-1),
-            nn.Linear(8 * 23 * 23, 64),
-            nn.LeakyReLU(0.2),
+            nn.Linear(32 * 21 * 21, 64),
+            nn.LeakyReLU(0.1),
             nn.Linear(64, 1),
         )
 
@@ -66,24 +66,23 @@ class Generator(nn.Module):
         self.seq = nn.Sequential(
             nn.Linear(zdim, CH * 4 * 4, bias=False),
             Reshape(CH, 4, 4),
-            nn.BatchNorm2d(CH),
             nn.Tanh(),
-            nn.ConvTranspose2d(in_channels=CH, out_channels=CH // 2, kernel_size=6, padding=1, stride=2, bias=False),
+            nn.ConvTranspose2d(in_channels=CH, out_channels=CH // 2, kernel_size=6, padding=2, stride=2, bias=False),
             nn.BatchNorm2d(CH // 2),
             nn.Tanh(),
-            nn.ConvTranspose2d(in_channels=CH // 2, out_channels=CH // 4, kernel_size=6, padding=1, stride=2, bias=False),
+            nn.ConvTranspose2d(in_channels=CH // 2, out_channels=CH // 4, kernel_size=6, padding=2, stride=2, bias=False),
             nn.BatchNorm2d(CH // 4),
             nn.Tanh(),
-            nn.ConvTranspose2d(in_channels=CH // 4, out_channels=CH // 8, kernel_size=6, padding=1, stride=2, bias=False),
-            nn.BatchNorm2d(CH // 8),
+            nn.ConvTranspose2d(in_channels=CH // 4, out_channels=CH // 4, kernel_size=6, padding=2, stride=2, bias=False),
+            nn.BatchNorm2d(CH // 4),
             nn.Tanh(),
-            nn.ConvTranspose2d(in_channels=CH // 8, out_channels=3, kernel_size=6, padding=1, stride=2, bias=False),
-            nn.BatchNorm2d(3),
+            nn.ConvTranspose2d(in_channels=CH // 4, out_channels=3, kernel_size=6, padding=2, stride=2, bias=False),
             nn.Sigmoid()
         )
 
     def forward(self, x):
         x = self.seq(x)
+        assert x.size(-1) == 64, x.size(-1)
         return nn.functional.interpolate(x, scale_factor=100/x.size(-1), mode="bilinear", align_corners=False)
 
 g_output = Generator()(torch.zeros(10, zdim))
@@ -108,8 +107,8 @@ generator.to(device)
 discriminator.to(device)
 
 #%% Training epochs
-d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=0.001, betas=(.5, .999))
-g_optimizer = torch.optim.Adam(generator.parameters(), lr=0.0002, betas=(.5, .999))
+d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=0.0001, betas=(.5, .999))
+g_optimizer = torch.optim.Adam(generator.parameters(), lr=0.00003, betas=(.9, .999))
 criterion = nn.BCEWithLogitsLoss()
 minibatch_size = 24
 rounds = range(facedata.N // minibatch_size if device.type == "cuda" else 10)
