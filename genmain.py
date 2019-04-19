@@ -1,14 +1,18 @@
 import facedata
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
 import torch
 import torch.nn as nn
 import time
 
 #%% Setup
 
-sns.set_style("darkgrid")  # Make pyplot look better
+plots = False
+#plots = True
+
+if plots:
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    sns.set_style("darkgrid")  # Make pyplot look better
 
 def images_tensor(images, stride=2):
     """Scale, transpose and convert Numpy tensor into Torch tensor."""
@@ -155,17 +159,18 @@ for e in epochs:
             g_rounds += 1
     print(f"  Epoch {e+1:2d}/{len(epochs)}   {d_rounds:4d}×D {g_rounds:4d}×G » real {level_real:3.0%} vs. fake {level_fake:3.0%}")
     # Show the results
-    cols, rows = 4, 4  # no more than minibatch_size
-    fig, axes = plt.subplots(rows, cols, figsize=(cols * 2, rows * 2))
-    #real = real.detach().cpu().permute(0, 2, 3, 1).numpy()
-    fake = fake.detach().cpu().permute(0, 2, 3, 1).numpy()
-    for i, ax in enumerate(axes.flat):
-        ax.imshow(fake[i])
-        ax.grid(False)
-        ax.set_yticklabels([])
-        ax.set_xticklabels([])
-        ax.set_title(f"{levels[1, i]:.0%} real")
-    plt.show()
+    if plots:
+        cols, rows = 4, 4  # no more than minibatch_size
+        fig, axes = plt.subplots(rows, cols, figsize=(cols * 2, rows * 2))
+        #real = real.detach().cpu().permute(0, 2, 3, 1).numpy()
+        fake = fake.detach().cpu().permute(0, 2, 3, 1).numpy()
+        for i, ax in enumerate(axes.flat):
+            ax.imshow(fake[i])
+            ax.grid(False)
+            ax.set_yticklabels([])
+            ax.set_xticklabels([])
+            ax.set_title(f"{levels[1, i]:.0%} real")
+        plt.show()
 
 #%% Save current state
 torch.save(generator.state_dict(), "generator.pth")
@@ -173,26 +178,27 @@ torch.save(discriminator.state_dict(), "discriminator.pth")
 print("Saved to generator.pth and discriminator.pth!")
 
 #%% Prepare CPU-based generator for evaluation
-gen = Generator()
-gen.load_state_dict(generator.state_dict())
-gen.eval()
+if plots:
+    gen = Generator()
+    gen.load_state_dict(generator.state_dict())
+    gen.eval()
 
-def mix(a, b, x):
-    return a * (1 - x) + b * x
+    def mix(a, b, x):
+        return a * (1 - x) + b * x
 
 
-points = 3 * torch.randn((4, 1, zdim))
-cols, rows = 6, 6
-fig, axes = plt.subplots(rows, cols, figsize=(cols * 2, rows * 2))
-for x in range(cols):
-    ab = mix(points[0], points[1], x / cols)
-    cd = mix(points[2], points[3], x / cols)
-    for y in range(rows):
-        p = mix(ab, cd, y/rows)
-        fake = gen(p).detach().permute(0, 2, 3, 1).numpy()
-        ax = axes[y][x]
-        ax.imshow(fake[0])
-        ax.grid(False)
-        ax.set_yticklabels([])
-        ax.set_xticklabels([])
-plt.show()
+    points = 3 * torch.randn((4, 1, zdim))
+    cols, rows = 6, 6
+    fig, axes = plt.subplots(rows, cols, figsize=(cols * 2, rows * 2))
+    for x in range(cols):
+        ab = mix(points[0], points[1], x / cols)
+        cd = mix(points[2], points[3], x / cols)
+        for y in range(rows):
+            p = mix(ab, cd, y/rows)
+            fake = gen(p).detach().permute(0, 2, 3, 1).numpy()
+            ax = axes[y][x]
+            ax.imshow(fake[0])
+            ax.grid(False)
+            ax.set_yticklabels([])
+            ax.set_xticklabels([])
+    plt.show()
