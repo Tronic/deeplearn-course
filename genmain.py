@@ -43,14 +43,19 @@ class Discriminator(nn.Module):
     def __init__(self):
         super().__init__()
         self.seq = nn.Sequential(
-            nn.Conv2d(in_channels=3, out_channels=16, kernel_size=6),
+            nn.Conv2d(in_channels=3, out_channels=16, kernel_size=5, padding=2),
             nn.MaxPool2d(2),
             nn.LeakyReLU(0.1, inplace=True),
-            nn.Conv2d(in_channels=16, out_channels=32, kernel_size=6),
+            nn.Conv2d(in_channels=16, out_channels=32, kernel_size=5, padding=2),
+            nn.MaxPool2d(2),
+            nn.LeakyReLU(0.1, inplace=True),
+            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=5, padding=2),
             nn.MaxPool2d(2),
             nn.LeakyReLU(0.1, inplace=True),
             Reshape(-1),
-            nn.Linear(32 * 21 * 21, 64),
+            nn.Linear(64 * 12 * 12, 128),
+            nn.LeakyReLU(0.1, inplace=True),
+            nn.Linear(128, 64),
             nn.LeakyReLU(0.1, inplace=True),
             nn.Linear(64, 1),
         )
@@ -78,23 +83,28 @@ class Generator(nn.Module):
             nn.Linear(zdim, CH * 4 * 4, bias=False),
             Reshape(CH, 4, 4),
             nn.Tanh(),
-            nn.ConvTranspose2d(in_channels=CH, out_channels=CH // 2, kernel_size=6, padding=2, stride=2, bias=False),
+            nn.ConvTranspose2d(in_channels=CH, out_channels=CH // 2, kernel_size=5, padding=2, stride=2, bias=False),
             nn.BatchNorm2d(CH // 2),
             nn.Tanh(),
-            nn.ConvTranspose2d(in_channels=CH // 2, out_channels=CH // 4, kernel_size=6, padding=2, stride=2, bias=False),
+            nn.ConvTranspose2d(in_channels=CH // 2, out_channels=CH // 4, kernel_size=5, padding=2, stride=2, bias=False),
             nn.BatchNorm2d(CH // 4),
             nn.Tanh(),
-            nn.ConvTranspose2d(in_channels=CH // 4, out_channels=CH // 4, kernel_size=6, padding=2, stride=2, bias=False),
+            nn.ConvTranspose2d(in_channels=CH // 4, out_channels=CH // 4, kernel_size=5, padding=2, stride=2, bias=False),
             nn.BatchNorm2d(CH // 4),
             nn.Tanh(),
-            nn.ConvTranspose2d(in_channels=CH // 4, out_channels=3, kernel_size=6, padding=2, stride=2, bias=False),
-            nn.Sigmoid()
+            nn.ConvTranspose2d(in_channels=CH // 4, out_channels=CH // 4, kernel_size=5, padding=2, stride=2, bias=False),
+            nn.BatchNorm2d(CH // 4),
+            nn.LeakyReLU(0.1, inplace=True),
+            nn.ConvTranspose2d(in_channels=CH // 4, out_channels=CH // 4, kernel_size=5, padding=2, stride=2, bias=False),
+            nn.LeakyReLU(0.1, inplace=True),
+            nn.ConvTranspose2d(in_channels=CH // 4, out_channels=3, kernel_size=1, bias=True),  # Map channels to colors
+            nn.Tanh()
         )
 
     def forward(self, x):
         x = self.seq(x)
-        assert x.size(-1) == 64, x.size(-1)
-        return nn.functional.interpolate(x, scale_factor=100/x.size(-1), mode="bilinear", align_corners=False)
+        assert x.size(-1) == 97, f"got {x.size(-1)} pixels wide"
+        return nn.functional.interpolate(x, scale_factor=100/x.size(-1) + 1e-5, mode="bilinear", align_corners=False)
 
 g_output = Generator()(torch.zeros(10, zdim))
 assert g_output.shape == torch.Size((10, 3, 100, 100)), f"Generator output {g_output.shape}"
@@ -117,9 +127,13 @@ except:
 generator.to(device)
 discriminator.to(device)
 
+#%% Test plot parameters
+cols, rows = 4, 4
+z_test = random_latent(rows * cols)
+
 #%% Training epochs
-d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=0.0001, betas=(.5, .999))
-g_optimizer = torch.optim.Adam(generator.parameters(), lr=0.00003, betas=(.9, .999))
+d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=0.001, betas=(.5, .999))
+g_optimizer = torch.optim.Adam(generator.parameters(), lr=0.0001, betas=(.5, .999))
 criterion = nn.BCEWithLogitsLoss()
 minibatch_size = 24
 rounds = range(facedata.N // minibatch_size if device.type == "cuda" else 10)
@@ -138,7 +152,8 @@ for e in epochs:
         batch = slice(batch, batch + minibatch_size)
         # Run the discriminator on real and fake data
         real = images[batch].to(torch.float32)
-        real /= 255.0
+        real /= 128.0
+        real -= 1.0
         d_optimizer.zero_grad()
         z = random_latent(minibatch_size)
         fake = generator(z)
@@ -167,45 +182,21 @@ for e in epochs:
     print(f"  Epoch {e+1:2d}/{len(epochs)}   {d_rounds:4d}×D {g_rounds:4d}×G » real {level_real:3.0%} vs. fake {level_fake:3.0%}")
     # Show the results
     if plots:
-        cols, rows = 4, 4  # no more than minibatch_size
         fig, axes = plt.subplots(rows, cols, figsize=(cols * 2, rows * 2))
-        #real = real.detach().cpu().permute(0, 2, 3, 1).numpy()
-        fake = fake.detach().cpu().permute(0, 2, 3, 1).numpy()
+        fake_test = generator(z_test)
+        levels_test = discriminator(fake_test).detach().cpu().numpy()
+        levels_test = 1.0 / (1.0 + np.exp(-levels_test))  # Sigmoid for probability
+
+        fake_test = fake_test.detach().cpu().permute(0, 2, 3, 1).numpy()
         for i, ax in enumerate(axes.flat):
-            ax.imshow(fake[i])
+            ax.imshow(fake_test[i] / 2 + .5)
             ax.grid(False)
             ax.set_yticklabels([])
             ax.set_xticklabels([])
-            ax.set_title(f"{levels[1, i]:.0%} real")
+            ax.set_title(f"{levels_test[i, 0]:.0%} real")
         plt.show()
 
 #%% Save current state
 torch.save(generator.state_dict(), "generator.pth")
 torch.save(discriminator.state_dict(), "discriminator.pth")
 print("Saved to generator.pth and discriminator.pth!")
-
-#%% Prepare CPU-based generator for evaluation
-if plots:
-    gen = Generator()
-    gen.load_state_dict(generator.state_dict())
-    gen.eval()
-
-    def mix(a, b, x):
-        return a * (1 - x) + b * x
-
-
-    points = 3 * make_latent(4, 1)
-    cols, rows = 6, 6
-    fig, axes = plt.subplots(rows, cols, figsize=(cols * 2, rows * 2))
-    for x in range(cols):
-        ab = mix(points[0], points[1], x / cols)
-        cd = mix(points[2], points[3], x / cols)
-        for y in range(rows):
-            p = mix(ab, cd, y/rows)
-            fake = gen(p).detach().permute(0, 2, 3, 1).numpy()
-            ax = axes[y][x]
-            ax.imshow(fake[0])
-            ax.grid(False)
-            ax.set_yticklabels([])
-            ax.set_xticklabels([])
-    plt.show()
