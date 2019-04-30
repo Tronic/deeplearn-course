@@ -45,13 +45,13 @@ class Discriminator(nn.Module):
         self.seq = nn.Sequential(
             nn.Conv2d(in_channels=3, out_channels=16, kernel_size=6),
             nn.MaxPool2d(2),
-            nn.LeakyReLU(0.1),
+            nn.LeakyReLU(0.1, inplace=True),
             nn.Conv2d(in_channels=16, out_channels=32, kernel_size=6),
             nn.MaxPool2d(2),
-            nn.LeakyReLU(0.1),
+            nn.LeakyReLU(0.1, inplace=True),
             Reshape(-1),
             nn.Linear(32 * 21 * 21, 64),
-            nn.LeakyReLU(0.1),
+            nn.LeakyReLU(0.1, inplace=True),
             nn.Linear(64, 1),
         )
 
@@ -59,7 +59,14 @@ class Discriminator(nn.Module):
         return self.seq(faces)
 
 # How many random numbers are fed to generator
-zdim = 3
+zdim = 100
+
+def random_latent(*size):
+    """Create random latent variables for size samples."""
+    global zdim, device
+    z = torch.randn((*size, zdim), device=device)
+    lengths = (z * z).sum(dim=-1, keepdim=True)  # Normalize to unit length (form a hypersphere)
+    return z / lengths
 
 class Generator(nn.Module):
     """Convolutional generator adapted from DCGAN by Radford et al."""
@@ -133,7 +140,7 @@ for e in epochs:
         real = images[batch].to(torch.float32)
         real /= 255.0
         d_optimizer.zero_grad()
-        z = torch.randn((minibatch_size, zdim), device=device)
+        z = random_latent(minibatch_size)
         fake = generator(z)
         output_fake = discriminator(fake.detach())
         output_real = discriminator(real)
@@ -187,7 +194,7 @@ if plots:
         return a * (1 - x) + b * x
 
 
-    points = 3 * torch.randn((4, 1, zdim))
+    points = 3 * make_latent(4, 1)
     cols, rows = 6, 6
     fig, axes = plt.subplots(rows, cols, figsize=(cols * 2, rows * 2))
     for x in range(cols):
