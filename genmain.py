@@ -30,7 +30,7 @@ def latent_tensor(*size):
 
 #%% Visualization init
 
-visualization = "png"
+visualization = "plt"
 cols, rows = 4, 4
 
 if visualization == "plt":
@@ -55,7 +55,7 @@ if visualization == "plt":
         plt.show()
 elif visualization == "png":
     from PIL import Image
-    cols, rows = 8, 5
+    cols, rows = 8, 4
     counter = 0
     def visualize():
         global cols, rows, z_test, generator, counter
@@ -213,10 +213,10 @@ for e in epochs:
             criterion(discriminator(fake), ones).backward()
             g_optimizer.step()
             g_rounds += 1
-            visualize()
+            #visualize()
     print(f"  Epoch {e+1:2d}/{len(epochs)}   {d_rounds:4d}×D {g_rounds:4d}×G » real {level_real:3.0%} vs. fake {level_fake:3.0%}")
     # Show the results
-    #visualize()
+    visualize()
 
 #%% Save current state
 torch.save(generator.state_dict(), "generator.pth")
