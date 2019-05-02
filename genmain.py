@@ -108,8 +108,8 @@ generator.to(device)
 discriminator.to(device)
 
 #%% Training epochs
-d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=0.01, betas=(.5, .999))
-g_optimizer = torch.optim.Adam(generator.parameters(), lr=0.005, betas=(.5, .998))
+d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=0.0001, betas=(.5, .999))
+g_optimizer = torch.optim.Adam(generator.parameters(), lr=0.00005, betas=(.5, .998))
 criterion = nn.BCEWithLogitsLoss()
 minibatch_size = 64
 rounds = range(facedata.N // minibatch_size if device.type == "cuda" else 10)
