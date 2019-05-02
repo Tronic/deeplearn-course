@@ -25,9 +25,8 @@ def latent_tensor(*size):
     """Create random latent variables for size samples."""
     global zdim, device
     z = torch.randn((*size, zdim), device=device)
-    lengths = (z * z).sum(dim=-1, keepdim=True)
-    return z / lengths * zdim  # Form a hypersphere of radius zdim
-
+    lengths = (z * z).sum(dim=-1, keepdim=True)**.5
+    return z / lengths * zdim**.5  # Form a hypersphere of radius sqrt(zdim)
 
 #%% Visualization init
 
