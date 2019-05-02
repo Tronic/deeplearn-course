@@ -3,6 +3,7 @@ from glob import glob
 from PIL import Image
 import numpy as np
 import re
+import torch
 from concurrent.futures import ThreadPoolExecutor
 
 filenames = glob("UTKFace/*.jpg")
@@ -41,3 +42,8 @@ for i, n in enumerate(filenames):
 # Load JPEGs into Numpy array using multiple threads
 with ThreadPoolExecutor() as exec:
     images = list(exec.map(lambda n: np.array(Image.open(n)), filenames))
+
+def torch_tensor(stride=1, device=None):
+    """Scale, transpose and convert Numpy tensor into Torch tensor."""
+    tensor = np.transpose(images, (0, 3, 1, 2))[:, :, ::stride, ::stride]  # N, rgb, height, width
+    return torch.tensor(tensor, device=device, dtype=torch.uint8)
