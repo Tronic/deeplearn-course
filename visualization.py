@@ -3,29 +3,38 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from PIL import Image
+import torch
 
 sns.set_style("darkgrid")  # Make pyplot look better
 
+s = 100  # Pixel-size of a single image
+
 class Base:
-    def __init__(self, shape=()):
+    def __init__(self, shape=(), device=None):
         self.shape = np.array(shape, dtype=np.int)
-        self.z = latent.random(self.shape.prod())
-    def __call__(self, **kwargs):
-        pass
+        self.z = latent.random(self.shape.prod(), device=device)
+    def generate(self, generator):
+        with torch.no_grad():
+            fake = generator(self.z)
+            return ((fake + 1.0) * 127.5)
+    def to_cpu(self, imgtensor):
+        return imgtensor.permute(0, 2, 3, 1).view(*self.shape, s, s, 3).cpu().numpy()
+
 
 class Plot(Base):
-    def __init__(self, rows=4, cols=4):
-        super().__init__((rows, cols))
+    def __init__(self, rows=4, cols=4, device=None):
+        super().__init__((rows, cols), device=device)
 
     def __call__(self, generator, discriminator):
         fig, axes = plt.subplots(*self.shape, figsize=2.0 * self.shape[::-1])
-        fake = generator(self.z)
-        levels = discriminator(fake).detach().cpu().numpy()
+        with torch.no_grad():
+            fake = self.generate(generator)
+            levels = discriminator(fake).cpu().numpy()
         levels = 1.0 / (1.0 + np.exp(-levels))  # Sigmoid for probability
 
-        fake = fake.detach().cpu().permute(0, 2, 3, 1).numpy()
+        fake = self.to_cpu(fake)
         for i, ax in enumerate(axes.flat):
-            ax.imshow(fake[i] / 2 + .5)
+            ax.imshow(fake[divmod(i, self.shape[0])] / 2 + .5)
             ax.grid(False)
             ax.set_yticklabels([])
             ax.set_xticklabels([])
@@ -33,17 +42,14 @@ class Plot(Base):
         plt.show()
 
 class PNG(Base):
-    def __init__(self, rows=4, cols=8):
-        super().__init__((rows, cols))
+    def __init__(self, rows=4, cols=8, device=None):
+        super().__init__((rows, cols), device=device)
         self.counter = 0
 
     def __call__(self, generator, **kwargs):
-        s = 100  # Pixel-size of a single image
         fh, fw = s * self.shape  # Full height and width of collated image
         img = np.empty((fh, fw, 3), dtype=np.uint8)
-        fake = generator(self.z)
-        fake = ((fake.detach() + 1.0) * 127.5).cpu().permute(0, 2, 3, 1).numpy()
-        fake = fake.reshape(*self.shape, s, s, 3)
+        fake = self.to_cpu(self.generate(generator))
         for r, c in np.ndindex(*self.shape):
             ir, ic = r * s, c * s
             img[ir : ir + s, ic : ic + s] = fake[r, c]
