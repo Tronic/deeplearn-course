@@ -68,9 +68,9 @@ class UpConvLayer(nn.Module):
         super().__init__()
         self.seq = nn.Sequential(
             nn.ConvTranspose2d(in_channels=in_channels, out_channels=out_channels, kernel_size=5, padding=2, bias=True),
-            nn.LeakyReLU(0.0625, inplace=True),
+            nn.Tanh(), #nn.LeakyReLU(0.0625, inplace=True),
             nn.ConvTranspose2d(in_channels=out_channels, out_channels=out_channels, kernel_size=3, padding=1, bias=True),
-            nn.LeakyReLU(0.0625, inplace=True),
+            nn.Tanh(), #nn.LeakyReLU(0.0625, inplace=True),
         )
 
     def forward(self, x):
