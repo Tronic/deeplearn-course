@@ -10,9 +10,10 @@ import visualization
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+image_size = 200
 print("Uploading tensors to", device)
-images = facedata.torch_tensor(stride=2, device=device)
-assert images.shape == torch.Size((facedata.N, 3, 100, 100))
+images = facedata.torch_tensor(stride=1, device=device)
+assert images.shape == torch.Size((facedata.N, 3, image_size, image_size))
 
 #%% Network definition
 
@@ -32,27 +33,30 @@ class Discriminator(nn.Module):
         super().__init__()
         self.seq = nn.Sequential(
             nn.Conv2d(in_channels=3, out_channels=64, kernel_size=5, padding=2),
-            nn.LeakyReLU(0.1, inplace=True),
+            nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(in_channels=64, out_channels=64, kernel_size=5, padding=2),
+            nn.Dropout2d(0.2, inplace=True),
             nn.MaxPool2d(2),
-            nn.LeakyReLU(0.1, inplace=True),
+            nn.LeakyReLU(0.25, inplace=True),
             nn.Conv2d(in_channels=64, out_channels=64, kernel_size=5, padding=2),
-            nn.LeakyReLU(0.1, inplace=True),
+            nn.LeakyReLU(0.25, inplace=True),
             nn.Conv2d(in_channels=64, out_channels=64, kernel_size=5, padding=2),
+            nn.Dropout2d(0.2, inplace=True),
             nn.MaxPool2d(2),
-            nn.LeakyReLU(0.1, inplace=True),
+            nn.LeakyReLU(0.25, inplace=True),
             nn.Conv2d(in_channels=64, out_channels=64, kernel_size=5, padding=2),
-            nn.LeakyReLU(0.1, inplace=True),
+            nn.LeakyReLU(0.25, inplace=True),
             nn.Conv2d(in_channels=64, out_channels=64, kernel_size=5, padding=2),
+            nn.Dropout2d(0.2, inplace=True),
             nn.MaxPool2d(2),
-            nn.LeakyReLU(0.1, inplace=True),
+            nn.LeakyReLU(0.25, inplace=True),
             Reshape(-1),
-            nn.Linear(64 * 12 * 12, 256),
-            nn.LeakyReLU(0.1, inplace=True),
+            nn.Linear(40_000, 256),
+            nn.LeakyReLU(0.25, inplace=True),
             nn.Linear(256, 128),
-            nn.LeakyReLU(0.1, inplace=True),
+            nn.LeakyReLU(0.25, inplace=True),
             nn.Linear(128, 64),
-            nn.LeakyReLU(0.1, inplace=True),
+            nn.LeakyReLU(0.25, inplace=True),
             nn.Linear(64, 1),
         )
 
@@ -63,16 +67,16 @@ class UpConvLayer(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
         self.seq = nn.Sequential(
-            nn.ConvTranspose2d(in_channels=in_channels, out_channels=out_channels, kernel_size=5, padding=2, stride=2, bias=False),
-            nn.BatchNorm2d(out_channels, affine=False, momentum=0.0001),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.ConvTranspose2d(in_channels=out_channels, out_channels=out_channels, kernel_size=5, padding=2, stride=1, bias=False),
-            nn.BatchNorm2d(out_channels, affine=False, momentum=0.0001),
-            nn.Tanh(),
+            nn.ConvTranspose2d(in_channels=in_channels, out_channels=out_channels, kernel_size=5, padding=2, bias=True),
+            nn.LeakyReLU(0.0625, inplace=True),
+            nn.ConvTranspose2d(in_channels=out_channels, out_channels=out_channels, kernel_size=3, padding=1, bias=True),
+            nn.LeakyReLU(0.0625, inplace=True),
         )
 
     def forward(self, x):
-        x = x * (x[0].numel() / (x.detach().sum() + 1.0))  # Normalize
+        scale = 1.0 / (abs(x.detach()).mean() + 1.0)
+        x = x * scale  # Normalize
+        x = nn.functional.interpolate(x, scale_factor=2, mode="nearest")
         return self.seq(x)
 
 
@@ -83,59 +87,62 @@ class LatentIn(nn.Module):
         self.channels = channels
         self.seq = nn.Sequential(
             nn.Linear(latent.dimension, latent.dimension, bias=False),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(latent.dimension, latent.dimension, bias=False),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(latent.dimension, channels, bias=False),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.LeakyReLU(0.125, inplace=True),
+            nn.Linear(latent.dimension, channels - 2, bias=False),
+            nn.LeakyReLU(0.125, inplace=True),
         )
-    def forward(self, x):
-        return self.seq(x).view(-1, self.channels, 1, 1).expand(-1, -1, self.image_size, self.image_size)
+        ls = torch.linspace(-1.0, 1.0, image_size)
+        self.register_buffer("coords", torch.cat((
+            ls.view(1, 1, self.image_size, 1).expand(-1, -1, -1, self.image_size),
+            ls.view(1, 1, 1, self.image_size).expand(-1, -1, self.image_size, -1),
+        ), dim=1))
 
+    def forward(self, x):
+        x = self.seq(x)
+        x = x.view(-1, self.channels - 2, 1, 1).expand(-1, -1, self.image_size, self.image_size)
+        return torch.cat((x, self.coords.expand(x.size(0), -1, -1, -1)), dim=1)
+
+class ToRGB(nn.Module):
+    """Convert channels into colors."""
+    def __init__(self, ch):
+        super().__init__()
+        self.seq = nn.Sequential(
+            nn.Sigmoid(),
+            nn.ConvTranspose2d(in_channels=ch, out_channels=3, kernel_size=1),
+            nn.Tanh())
+    def forward(self, x):
+        x = self.seq(x)
+        return nn.functional.interpolate(x, image_size, mode="bilinear", align_corners=False)
 
 class Generator(nn.Module):
     """Convolutional generator adapted from DCGAN by Radford et al."""
     def __init__(self):
         super().__init__()
-        CH, SIZE = 512, 4  # Initial channel count and image resolution
+        CH, SIZE = 512, 5  # Initial channel count and image resolution
+        self.init_size = SIZE
+        self.latimg = nn.Linear(latent.dimension, SIZE * SIZE, bias=False)
         self.lat = nn.ModuleList([
-            LatentIn(image_size=SIZE, channels=CH),
-            LatentIn(7, 8),
-            LatentIn(13, 8),
-            LatentIn(25, 8),
-            LatentIn(49, 8),
-            LatentIn(97, 8),
+            LatentIn(image_size=SIZE << i, channels=8 if i else CH) for i in range(5)
         ])
         self.upc = nn.ModuleList([
-            UpConvLayer(CH + 3, CH // 2),  # out 7x7
-            UpConvLayer(CH // 2 + 8, CH // 4),  # out 13x13
-            UpConvLayer(CH // 4 + 8, CH // 4),  # out 25x25
-            UpConvLayer(CH // 4 + 8, CH // 4),  # out 49x49
-            UpConvLayer(CH // 4 + 8, CH // 4),  # out 97x97
+            UpConvLayer(CH + 1, CH // 2),
+            UpConvLayer(CH // 2 + 8, CH // 4),
+            UpConvLayer(CH // 4 + 8, CH // 4),
+            UpConvLayer(CH // 4 + 8, CH // 4),
+            UpConvLayer(CH // 4 + 8, CH // 4),
         ])
         # Map channels to colors
-        self.toRGB = nn.Sequential(
-            nn.ConvTranspose2d(in_channels=CH // 4 + 8, out_channels=3, kernel_size=1, bias=True),
-            nn.Tanh()
-        )
+        self.toRGB = ToRGB(CH // 4)
 
     def forward(self, latent):
-        device = next(self.parameters()).device
-        N = latent.size(0)
-        x = torch.linspace(-1, 1, 4, device=device)
-        xc = x.view(1, 1, -1, 1).expand(N, 1, 4, 4)
-        yc = x.view(1, 1, 1, -1).expand(N, 1, 4, 4)
-        rnd = torch.randn((N, 1, 4, 4), device=device)
-        x = 100.0 * torch.cat((xc, yc, rnd), dim=1)
-        for upc, lat in zip(self.upc, self.lat):
-            x = upc(torch.cat((x, lat(latent)), dim=1))
-        x = self.toRGB(torch.cat((x, self.lat[-1](latent)), dim=1))
-        assert x.size(-1) == 97, f"got {x.size(-1)} pixels wide"
-        return nn.functional.interpolate(x, scale_factor=100/x.size(-1) + 1e-5, mode="bilinear", align_corners=False)
+        x = 1000.0 * self.latimg(latent).view(-1, 1, self.init_size, self.init_size)
+        for l in range(5):
+            x = self.upc[l](torch.cat((x, self.lat[l](latent)), dim=1))
+        return self.toRGB(x)
 
 # Verify network output shapes
 g_output = Generator()(latent.random(10))
-assert g_output.shape == torch.Size((10, 3, 100, 100)), f"Generator output {g_output.shape}"
+assert g_output.shape == torch.Size((10, 3, image_size, image_size)), f"Generator output {g_output.shape}"
 d_output = Discriminator()(g_output)
 assert d_output.shape == torch.Size((10, 1)), f"Discriminator output {d_output.shape}"
 del g_output, d_output
@@ -150,12 +157,13 @@ generator = Generator()
 generator.to(device)
 discriminator.to(device)
 
-d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=0.00005, betas=(.5, .999))
+d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=0.0001, betas=(.5, .99999))
 g_optimizer = torch.optim.Adam([
-    {"params": generator.lat.parameters(), "lr": 0.000005},
-    {"params": generator.upc.parameters(), "lr": 0.00001},
-    {"params": generator.toRGB.parameters(), "lr": 0.0001},
-], betas=(.5, .999))
+    {"params": generator.latimg.parameters(), "lr": 0.001},
+    {"params": generator.lat.parameters(), "lr": 0.0005},
+    {"params": generator.upc.parameters(), "lr": 0.00002},
+    {"params": generator.toRGB.parameters(), "lr": 0.001},
+], betas=(.8, .99999))
 
 criterion = nn.BCEWithLogitsLoss()
 
@@ -167,14 +175,12 @@ try:
     discriminator.load_state_dict(checkpoint["discriminator"])
     generator.load_state_dict(checkpoint["generator"])
     print("Networks loaded:", filename)
-    d_optimizer.load_state_dict(checkpoint["d_optimizer"])
-    g_optimizer.load_state_dict(checkpoint["g_optimizer"])
 except:
     pass
 
 
 #%% Training
-minibatch_size = 64
+minibatch_size = 32
 rounds = range(facedata.N // minibatch_size if device.type == "cuda" else 10)
 epochs = range(100)
 ones = torch.ones((minibatch_size, 1), device=device)
@@ -186,14 +192,16 @@ for e in epochs:
     d_rounds = g_rounds = 0
     rtimer = time.perf_counter()
     for r in rounds:
-        print(f"  [{'*' * (25 * r // rounds[-1]):25s}] {r+1:4d}/{len(rounds)} {(time.perf_counter() - rtimer) / (r + .1) * len(rounds):3.0f} s/epoch {level_real:.0%} vs {level_fake:.0%}", end="\r")
+        print(f"  [{'*' * (25 * r // rounds[-1]):25s}] {g_rounds:03d}:{d_rounds:03d}  {(time.perf_counter() - rtimer) / (r + .1) * len(rounds):3.0f} s/epoch {level_real:4.0%} vs{level_fake:4.0%}", end="\N{ESC}[K\r")
         # Make a set of fakes
         z = latent.random(minibatch_size, device=device)
         g_optimizer.zero_grad()
-        generator.train()  # Allow updates of batch normalization
         fake = generator(z)
-        generator.eval()  # Disable further batchnorm updates
-        # Train the discriminator until it is good enough
+        # Train the generator
+        criterion(discriminator(fake), ones).backward()
+        g_optimizer.step()
+        g_rounds += 1
+        # Train the discriminator one time or until it is good enough
         while True:
             # Choose a random slice of images
             batch = np.random.randint(facedata.N - minibatch_size)
@@ -205,6 +213,11 @@ for e in epochs:
             d_optimizer.zero_grad()
             output_fake = discriminator(fake.detach())
             output_real = discriminator(real)
+            # Train the discriminator
+            criterion(output_real, ones).backward()
+            criterion(output_fake, zeros).backward()
+            d_optimizer.step()
+            d_rounds += 1
             # Check levels
             levels = np.stack((
                 output_real.detach().cpu().numpy().reshape(minibatch_size),
@@ -213,21 +226,15 @@ for e in epochs:
             levels = 1.0 / (1.0 + np.exp(-levels))  # Sigmoid for probability
             level_real, level_fake = levels.mean(axis=1)
             level_diff = level_real - level_fake
-            if level_diff > 0.3: break  # Good enough discrimination!
-            # Train the discriminator
-            criterion(output_real, ones).backward()
-            criterion(output_fake, zeros).backward()
-            d_optimizer.step()
-            d_rounds += 1
-        # Train the generator
-        criterion(discriminator(fake), ones).backward()
-        g_optimizer.step()
-        g_rounds += 1
-        visualize(generator=generator, discriminator=discriminator)
-    print(f"  Epoch {e+1:2}/{len(epochs)}   {d_rounds:4d}×D {g_rounds:4d}×G » real {level_real:3.0%} vs. fake {level_fake:3.0%}")
+            if level_diff > 0.2: break  # Good enough
+            for param_group in d_optimizer.param_groups:
+                param_group['lr'] = 0.0001
+        if level_diff > 0.7:
+            for param_group in d_optimizer.param_groups:
+                param_group['lr'] *= 0.9
+        if r % 37 == 0: visualize(generator=generator, discriminator=discriminator)
+    print(f"  Epoch {e+1:2}/{len(epochs)} {g_rounds:4d}×G {d_rounds:4d}×D » real{level_real:4.0%} vs. fake{level_fake:4.0%}", end="\N{ESC}[K\n")
     torch.save({
         "generator": generator.state_dict(),
         "discriminator": discriminator.state_dict(),
-        "g_optimizer": g_optimizer.state_dict(),
-        "d_optimizer": d_optimizer.state_dict(),
     }, f"facegen{e+1:03}.pth")
