@@ -197,6 +197,7 @@ for e in epochs:
         z = latent.random(minibatch_size, device=device)
         g_optimizer.zero_grad()
         fake = generator(z)
+        fake += 0.1 * torch.randn_like(fake)
         # Train the generator
         criterion(discriminator(fake), ones).backward()
         g_optimizer.step()
@@ -209,6 +210,7 @@ for e in epochs:
             real = images[batch].to(torch.float32)
             real /= 128.0
             real -= 1.0
+            real += 0.1 * torch.randn_like(real)
             # Discriminate real and fake images
             d_optimizer.zero_grad()
             output_fake = discriminator(fake.detach())
