@@ -123,7 +123,7 @@ class Generator(nn.Module):
         x = 64 * self.latimg(latent).view(-1, 1, self.init_size, self.init_size)
         latent = self.lat(latent)
         for upconv in self.upc:
-            if train: abs(10.0 - 10.0 * x.std(dim=0).mean()).backward(retain_graph=True)
+            if train: abs(5.0 - 10.0 * x.std(dim=0).mean()).backward(retain_graph=True)
             lat = nn.functional.interpolate(latent, x.size(2))
             x = upconv(torch.cat((x, lat), dim=1))
         return self.toRGB(x)
