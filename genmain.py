@@ -155,16 +155,6 @@ generator = Generator()
 generator.to(device)
 discriminator.to(device)
 
-d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=0.0001, betas=(.5, .99999))
-g_optimizer = torch.optim.Adam([
-    {"params": generator.latimg.parameters(), "lr": 0.001},
-    {"params": generator.lat.parameters(), "lr": 0.0005},
-    {"params": generator.upc.parameters(), "lr": 0.00002},
-    {"params": generator.toRGB.parameters(), "lr": 0.001},
-], betas=(.8, .99999))
-
-criterion = nn.BCEWithLogitsLoss()
-
 #%% Load previous state
 try:
     from glob import glob
@@ -184,6 +174,16 @@ epochs = range(100)
 ones = torch.ones((minibatch_size, 1), device=device)
 zeros = torch.zeros((minibatch_size, 1), device=device)
 level_real = level_fake = 0.5
+d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=0.0001, betas=(.5, .99999))
+g_optimizer = torch.optim.Adam([
+    {"params": generator.latimg.parameters(), "lr": 0.0001},
+    {"params": generator.lat.parameters(), "lr": 0.0005},
+    {"params": generator.upc.parameters(), "lr": 0.00002},
+    {"params": generator.toRGB.parameters(), "lr": 0.001},
+], betas=(.8, .99999))
+
+criterion = nn.BCEWithLogitsLoss()
+
 
 print(f"Training with {len(rounds)} rounds per epoch:")
 for e in epochs:
