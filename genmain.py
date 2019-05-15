@@ -10,9 +10,9 @@ import visualization
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-image_size = 200
+image_size = 50
 print("Uploading tensors to", device)
-images = facedata.torch_tensor(stride=1, device=device)
+images = facedata.torch_tensor(stride=4, device=device)
 assert images.shape == torch.Size((facedata.N, 3, image_size, image_size))
 
 #%% Network definition
@@ -33,19 +33,19 @@ class Discriminator(nn.Module):
         super().__init__()
         self.seq = nn.Sequential(
             nn.Conv2d(in_channels=3, out_channels=64, kernel_size=5, padding=2),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=5, padding=2),
-            nn.Dropout2d(0.2, inplace=True),
-            nn.MaxPool2d(2),
             nn.LeakyReLU(0.25, inplace=True),
-            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=5, padding=2),
-            nn.LeakyReLU(0.25, inplace=True),
-            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=5, padding=2),
-            nn.Dropout2d(0.2, inplace=True),
-            nn.MaxPool2d(2),
-            nn.LeakyReLU(0.25, inplace=True),
-            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=5, padding=2),
-            nn.LeakyReLU(0.25, inplace=True),
+#            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=5, padding=2),
+#            nn.Dropout2d(0.2, inplace=True),
+#            nn.MaxPool2d(2),
+#            nn.LeakyReLU(0.25, inplace=True),
+#            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=5, padding=2),
+#            nn.LeakyReLU(0.25, inplace=True),
+#            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=5, padding=2),
+#            nn.Dropout2d(0.2, inplace=True),
+#            nn.MaxPool2d(2),
+#            nn.LeakyReLU(0.25, inplace=True),
+#            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=5, padding=2),
+#            nn.LeakyReLU(0.25, inplace=True),
             nn.Conv2d(in_channels=64, out_channels=64, kernel_size=5, padding=2),
             nn.Dropout2d(0.2, inplace=True),
             nn.MaxPool2d(2),
@@ -136,7 +136,7 @@ class Generator(nn.Module):
 
     def forward(self, latent):
         x = 1000.0 * self.latimg(latent).view(-1, 1, self.init_size, self.init_size)
-        for l in range(5):
+        for l in range(2):
             x = self.upc[l](torch.cat((x, self.lat[l](latent)), dim=1))
         return self.toRGB(x)
 
