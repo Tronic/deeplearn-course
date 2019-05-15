@@ -10,9 +10,9 @@ import visualization
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-image_size = 50
+image_size = 100
 print("Uploading tensors to", device)
-images = facedata.torch_tensor(stride=4, device=device)
+images = facedata.torch_tensor(stride=2, device=device)
 assert images.shape == torch.Size((facedata.N, 3, image_size, image_size))
 
 #%% Network definition
@@ -34,12 +34,12 @@ class Discriminator(nn.Module):
         self.seq = nn.Sequential(
             nn.Conv2d(in_channels=3, out_channels=64, kernel_size=5, padding=2),
             nn.LeakyReLU(0.25, inplace=True),
-#            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=5, padding=2),
-#            nn.Dropout2d(0.2, inplace=True),
-#            nn.MaxPool2d(2),
-#            nn.LeakyReLU(0.25, inplace=True),
-#            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=5, padding=2),
-#            nn.LeakyReLU(0.25, inplace=True),
+            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=5, padding=2),
+            nn.Dropout2d(0.2, inplace=True),
+            nn.MaxPool2d(2),
+            nn.LeakyReLU(0.25, inplace=True),
+            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=5, padding=2),
+            nn.LeakyReLU(0.25, inplace=True),
 #            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=5, padding=2),
 #            nn.Dropout2d(0.2, inplace=True),
 #            nn.MaxPool2d(2),
@@ -61,22 +61,20 @@ class Discriminator(nn.Module):
         )
 
     def forward(self, faces):
-        # Calculate as sum of normal and mirrored faces
-        return self.seq(faces) + self.seq(faces.flip(dims=(2,)))
+        # Calculate as sum of normal and horizontally mirrored faces
+        return self.seq(faces) + self.seq(faces.flip(dims=(3,)))
 
 class UpConvLayer(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
         self.seq = nn.Sequential(
-            nn.ConvTranspose2d(in_channels=in_channels, out_channels=out_channels, kernel_size=5, padding=2, bias=True),
-            nn.Tanh(), #nn.LeakyReLU(0.0625, inplace=True),
-            nn.ConvTranspose2d(in_channels=out_channels, out_channels=out_channels, kernel_size=3, padding=1, bias=True),
-            nn.Tanh(), #nn.LeakyReLU(0.0625, inplace=True),
+            nn.ConvTranspose2d(in_channels=in_channels, out_channels=out_channels, kernel_size=3, padding=1, bias=False),
+            nn.Tanh(),
+            nn.ConvTranspose2d(in_channels=out_channels, out_channels=out_channels, kernel_size=5, padding=2, bias=True),
+            nn.Tanh(),
         )
 
     def forward(self, x):
-        #scale = 1.0 / (abs(x.detach()).mean() + 1.0)
-        #x = x * scale  # Normalize
         x = nn.functional.interpolate(x, scale_factor=2, mode="nearest")
         return self.seq(x)
 
@@ -87,8 +85,6 @@ class LatentIn(nn.Module):
         self.image_size = image_size
         self.channels = channels
         self.seq = nn.Sequential(
-            nn.Linear(latent.dimension, latent.dimension, bias=False),
-            nn.LeakyReLU(0.125, inplace=True),
             nn.Linear(latent.dimension, channels - 2, bias=False),
             nn.LeakyReLU(0.125, inplace=True),
         )
@@ -119,26 +115,27 @@ class Generator(nn.Module):
     """Convolutional generator adapted from DCGAN by Radford et al."""
     def __init__(self):
         super().__init__()
-        CH, SIZE = 512, 5  # Initial channel count and image resolution
+        CH, SIZE = 256, 5  # Initial channel count and image resolution
         self.init_size = SIZE
         self.latimg = nn.Linear(latent.dimension, SIZE * SIZE, bias=False)
-        self.lat = nn.ModuleList([
-            LatentIn(image_size=SIZE << i, channels=8 if i else CH) for i in range(5)
-        ])
+        self.lat = LatentIn(image_size=SIZE << 5, channels=CH)
         self.upc = nn.ModuleList([
-            UpConvLayer(CH + 1, CH // 2),
-            UpConvLayer(CH // 2 + 8, CH // 4),
-            UpConvLayer(CH // 4 + 8, CH // 4),
-            UpConvLayer(CH // 4 + 8, CH // 4),
-            UpConvLayer(CH // 4 + 8, CH // 4),
+            UpConvLayer(CH + 1, CH),
+            UpConvLayer(2 * CH, CH),
+            UpConvLayer(2 * CH, CH),
+            UpConvLayer(2 * CH, CH),
+            UpConvLayer(2 * CH, CH),
         ])
         # Map channels to colors
-        self.toRGB = ToRGB(CH // 4)
+        self.toRGB = ToRGB(CH)
 
-    def forward(self, latent):
-        x = 1000.0 * self.latimg(latent).view(-1, 1, self.init_size, self.init_size)
-        for l in range(2):
-            x = self.upc[l](torch.cat((x, self.lat[l](latent)), dim=1))
+    def forward(self, latent, train=False):
+        x = 256.0 * self.latimg(latent).view(-1, 1, self.init_size, self.init_size)
+        latent = self.lat(latent)
+        for l in range(4):
+            if train: abs(0.5 - x.std(dim=0).mean()).backward(retain_graph=True)
+            lat = nn.functional.interpolate(latent, x.size(2))
+            x = self.upc[l](torch.cat((x, lat), dim=1))
         return self.toRGB(x)
 
 # Verify network output shapes
@@ -197,11 +194,11 @@ for e in epochs:
         # Make a set of fakes
         z = latent.random(minibatch_size, device=device)
         g_optimizer.zero_grad()
-        fake = generator(z)
+        fake = generator(z, train=True)
         # Train the generator
-        var = fake.var(dim=0).mean()  # Variance across samples
+        #var = fake.var(dim=0).mean()  # Variance across samples
         loss = criterion(discriminator(fake), ones)
-        (loss - 0.01 * var).backward()
+        loss.backward()
         g_optimizer.step()
         g_rounds += 1
         # Train the discriminator one time or until it is good enough
@@ -235,7 +232,7 @@ for e in epochs:
         if level_diff > 0.7:
             for param_group in d_optimizer.param_groups:
                 param_group['lr'] *= 0.9
-        if r % 37 == 0: visualize(generator=generator, discriminator=discriminator)
+        visualize(generator=generator, discriminator=discriminator)
     print(f"  Epoch {e+1:2}/{len(epochs)} {g_rounds:4d}×G {d_rounds:4d}×D » real{level_real:4.0%} vs. fake{level_fake:4.0%}", end="\N{ESC}[K\n")
     torch.save({
         "generator": generator.state_dict(),

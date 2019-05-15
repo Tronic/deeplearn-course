@@ -6,8 +6,7 @@ from PIL import Image
 import torch
 
 sns.set_style("darkgrid")  # Make pyplot look better
-
-s = 50  # Pixel-size of a single image
+s = 100
 
 class Base:
     def __init__(self, shape=(), device=None):
