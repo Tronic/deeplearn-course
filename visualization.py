@@ -6,7 +6,6 @@ from PIL import Image
 import torch
 
 sns.set_style("darkgrid")  # Make pyplot look better
-s = 100
 
 class Base:
     def __init__(self, shape=(), device=None):
@@ -17,6 +16,7 @@ class Base:
             fake = generator(self.z)
             return ((fake + 1.0) * 127.5)
     def to_cpu(self, imgtensor):
+        s = imgtensor.size(2)
         return imgtensor.permute(0, 2, 3, 1).view(*self.shape, s, s, 3).cpu().numpy()
 
 
@@ -46,9 +46,10 @@ class PNG(Base):
         self.counter = 0
 
     def __call__(self, generator, **kwargs):
+        fake = self.to_cpu(self.generate(generator))
+        s = fake.shape[2]
         fh, fw = s * self.shape  # Full height and width of collated image
         img = np.empty((fh, fw, 3), dtype=np.uint8)
-        fake = self.to_cpu(self.generate(generator))
         for r, c in np.ndindex(*self.shape):
             ir, ic = r * s, c * s
             img[ir : ir + s, ic : ic + s] = fake[r, c]
