@@ -61,7 +61,8 @@ class Discriminator(nn.Module):
         )
 
     def forward(self, faces):
-        return self.seq(faces)
+        # Calculate as sum of normal and mirrored faces
+        return self.seq(faces) + self.seq(faces.flip(dims=(2,)))
 
 class UpConvLayer(nn.Module):
     def __init__(self, in_channels, out_channels):
@@ -74,8 +75,8 @@ class UpConvLayer(nn.Module):
         )
 
     def forward(self, x):
-        scale = 1.0 / (abs(x.detach()).mean() + 1.0)
-        x = x * scale  # Normalize
+        #scale = 1.0 / (abs(x.detach()).mean() + 1.0)
+        #x = x * scale  # Normalize
         x = nn.functional.interpolate(x, scale_factor=2, mode="nearest")
         return self.seq(x)
 
@@ -197,9 +198,10 @@ for e in epochs:
         z = latent.random(minibatch_size, device=device)
         g_optimizer.zero_grad()
         fake = generator(z)
-        fake += 0.1 * torch.randn_like(fake)
         # Train the generator
-        criterion(discriminator(fake), ones).backward()
+        var = fake.var(dim=0).mean()  # Variance across samples
+        loss = criterion(discriminator(fake), ones)
+        (loss - 0.01 * var).backward()
         g_optimizer.step()
         g_rounds += 1
         # Train the discriminator one time or until it is good enough
@@ -210,7 +212,6 @@ for e in epochs:
             real = images[batch].to(torch.float32)
             real /= 128.0
             real -= 1.0
-            real += 0.1 * torch.randn_like(real)
             # Discriminate real and fake images
             d_optimizer.zero_grad()
             output_fake = discriminator(fake.detach())
