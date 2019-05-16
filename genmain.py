@@ -123,7 +123,9 @@ class Generator(nn.Module):
         x = 64 * self.latimg(latent).view(-1, 1, self.init_size, self.init_size)
         latent = self.lat(latent)
         for upconv in self.upc:
-            if train: abs(5.0 - 10.0 * x.std(dim=0).mean()).backward(retain_graph=True)
+            if train:
+                xc = torch.cat((x[1:], x[0:1]), dim=0)  # Samples cycled by one spot
+                abs(5.0 - 10.0 * abs(x - xc).mean()).backward(retain_graph=True)
             lat = nn.functional.interpolate(latent, x.size(2))
             x = upconv(torch.cat((x, lat), dim=1))
         return self.toRGB(x)
@@ -181,7 +183,6 @@ for e in epochs:
     d_rounds = g_rounds = 0
     rtimer = time.perf_counter()
     for r in rounds:
-        print(f"  [{'*' * (25 * r // rounds[-1]):25s}] {g_rounds:03d}:{d_rounds:03d} {level_real:4.0%} vs{level_fake:4.0%}  {(time.perf_counter() - rtimer) / (r + .1) * len(rounds):3.0f} s/epoch", end="\N{ESC}[K\r")
         # Make a set of fakes
         z = latent.random(minibatch_size, device=device)
         g_optimizer.zero_grad()
@@ -194,6 +195,10 @@ for e in epochs:
         g_rounds += 1
         # Train the discriminator one time or until it is good enough
         for real in images:  # Infinite loop of random sample images
+            print(f"  [{'*' * (25 * r // rounds[-1]):25s}] {g_rounds:03d}:{d_rounds:03d}"
+                f"  {level_real:4.0%} vs{level_fake:4.0%}"
+                f"  {(time.perf_counter() - rtimer) / (r + .1) * len(rounds):3.0f} s/epoch",
+            end="\N{ESC}[K\r")
             # Discriminate real and fake images
             d_optimizer.zero_grad()
             output_fake = discriminator(fake)
