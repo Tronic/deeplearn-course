@@ -222,7 +222,7 @@ for e in epochs:
             level_diff = level_real - level_fake
             stats = f"{g_rounds:04d}:{d_rounds:04d}  {level_real:4.0%} vs{level_fake:4.0%}  {(time.perf_counter() - rtimer) / (r + .1) * len(rounds):3.0f} s/epoch"
             if r == rounds[-1]:
-                print(f"\r  Epoch {e + 1:2}/{len(epochs)} {isize:3}px done   » {stats}", end="\N{ESC}[K\n")
+                print(f"\r  Epoch {e:2}/{len(epochs)} {isize:3}px done   » {stats}", end="\N{ESC}[K\n")
             else:
                 print(f"\r  [{'*' * (25 * r // rounds[-1]):25s}] {stats}", end="\N{ESC}[K")
             if level_diff > 0.2: break  # Good enough
@@ -233,4 +233,4 @@ for e in epochs:
     torch.save({
         "generator": generator.state_dict(),
         "discriminator": discriminator.state_dict(),
-    }, f"facegen{e+1:03}.pth")
+    }, f"facegen{e:03}.pth")
