@@ -11,7 +11,7 @@ import visualization
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 faces = facedata.Torch(device=device)
 
-base_size = 10
+base_size = 5
 image_size = base_size << 5  # 160px max size
 discriminator_channels = 64
 generator_channels = 64
@@ -24,7 +24,7 @@ class DownConvLayer(nn.Module):
     def __init__(self, channels):
         super().__init__()
         self.seq = nn.Sequential(
-#            nn.Conv2d(channels, channels, kernel_size=5, padding=2), nn.LeakyReLU(0.25, inplace=True),
+            nn.Conv2d(channels, channels, kernel_size=5, padding=2), nn.LeakyReLU(0.25, inplace=True),
             nn.Conv2d(channels, channels, kernel_size=5, padding=2), nn.MaxPool2d(2), nn.LeakyReLU(0.25, inplace=True),
         )
 

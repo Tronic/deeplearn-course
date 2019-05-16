@@ -48,7 +48,7 @@ class Video(Base):
 
     def __enter__(self):
         self.ffmpeg = subprocess.Popen(
-            'ffmpeg -framerate 60 -s 1280x660 -f rawvideo -pix_fmt rgb24 -i pipe: -c:v libx264 -crf 18 -y out.mkv'.split(),
+            'ffmpeg -framerate 60 -s 1280x660 -f rawvideo -pix_fmt rgb24 -i pipe: -c:v libx264 -crf 18 -y training.mkv'.split(),
             stdin=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
 
