@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from PIL import Image
 import torch
+from torch import nn
 import subprocess
 
 sns.set_style("darkgrid")  # Make pyplot look better
@@ -58,21 +59,34 @@ class PNG(Base):
         self.counter += 1
 
 class Video(Base):
-    def __init__(self):
+    def __init__(self, rows=4, cols=8, device=None):
         super().__init__((rows, cols), device=device)
+
+    def __enter__(self):
         self.ffmpeg = subprocess.Popen(
             'ffmpeg -framerate 60 -s 1280x640 -f rawvideo -i pipe: -c:v libx264 -crf 18 -y out.mkv'.split(),
             stdin=subprocess.PIPE,
 #            stdout=subprocess.DEVNULL,
 #            stderr=subprocess.DEVNULL,
         )
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        print("Closing ffmpeg")
+        self.ffmpeg.stdin.close()
+        self.ffmpeg.wait(10)
+        print("Saved to out.mkv")
+
     def __call__(self, generator, discriminator, **genargs):
-        fake = self.to_cpu(self.generate(generator, genargs))
+        fake = self.generate(generator, genargs)
+        fake = nn.functional.interpolate(fake, 160)
+        fake = self.to_cpu(fake)
+        s = fake.shape[2]
         fh, fw = s * self.shape  # Full height and width of collated image
+        assert fw == 1280 and fh == 640
         img = np.empty((fh, fw, 3), dtype=np.uint8)
         for r, c in np.ndindex(*self.shape):
             ir, ic = r * s, c * s
             img[ir : ir + s, ic : ic + s] = fake[r, c]
-
-        self.counter += 1
+        self.ffmpeg.stdin.write(img.tobytes())
 
