@@ -1,4 +1,4 @@
-from . import latent
+import latent
 import numpy as np
 import torch
 from torch import nn
@@ -76,10 +76,8 @@ class Video(Base):
             with Image(width=1280, height=20, background=Color("black")) as wimg:
                 draw.font_family = "DejaVu Sans Mono"
                 draw.font_size = 16.0
-                draw.push()
                 draw.fill_color = Color("white")
                 draw.text(20, 16, stats)
-                draw.pop()
                 draw(wimg)
                 img[-20:, :, :] = np.array(wimg).reshape(20, 1280, 4)[:, :, :3]
         self.ffmpeg.stdin.write(img.tobytes())
