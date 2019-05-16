@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from PIL import Image
 import torch
+import subprocess
 
 sns.set_style("darkgrid")  # Make pyplot look better
 
@@ -11,9 +12,9 @@ class Base:
     def __init__(self, shape=(), device=None):
         self.shape = np.array(shape, dtype=np.int)
         self.z = latent.random(self.shape.prod(), device=device)
-    def generate(self, generator):
+    def generate(self, generator, genargs):
         with torch.no_grad():
-            fake = generator(self.z)
+            fake = generator(self.z, **genargs)
             return ((fake + 1.0) * 127.5)
     def to_cpu(self, imgtensor):
         s = imgtensor.size(2)
@@ -45,8 +46,8 @@ class PNG(Base):
         super().__init__((rows, cols), device=device)
         self.counter = 0
 
-    def __call__(self, generator, **kwargs):
-        fake = self.to_cpu(self.generate(generator))
+    def __call__(self, generator, discriminator, **genargs):
+        fake = self.to_cpu(self.generate(generator, genargs))
         s = fake.shape[2]
         fh, fw = s * self.shape  # Full height and width of collated image
         img = np.empty((fh, fw, 3), dtype=np.uint8)
@@ -55,3 +56,23 @@ class PNG(Base):
             img[ir : ir + s, ic : ic + s] = fake[r, c]
         Image.fromarray(img).save(f"training/img{self.counter:05}.png")
         self.counter += 1
+
+class Video(Base):
+    def __init__(self):
+        super().__init__((rows, cols), device=device)
+        self.ffmpeg = subprocess.Popen(
+            'ffmpeg -framerate 60 -s 1280x640 -f rawvideo -i pipe: -c:v libx264 -crf 18 -y out.mkv'.split(),
+            stdin=subprocess.PIPE,
+#            stdout=subprocess.DEVNULL,
+#            stderr=subprocess.DEVNULL,
+        )
+    def __call__(self, generator, discriminator, **genargs):
+        fake = self.to_cpu(self.generate(generator, genargs))
+        fh, fw = s * self.shape  # Full height and width of collated image
+        img = np.empty((fh, fw, 3), dtype=np.uint8)
+        for r, c in np.ndindex(*self.shape):
+            ir, ic = r * s, c * s
+            img[ir : ir + s, ic : ic + s] = fake[r, c]
+
+        self.counter += 1
+
