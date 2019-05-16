@@ -152,15 +152,14 @@ discriminator.to(device)
 
 #%% Load previous state
 try:
-    from glob import glob
-    filename = glob("facegen*.pth")[-1]
+    import os, glob
+    filename = sorted(glob.glob("facegen*.pth"), key=os.path.getmtime)[-1]
     checkpoint = torch.load(filename, map_location=lambda storage, location: storage)
     discriminator.load_state_dict(checkpoint["discriminator"])
     generator.load_state_dict(checkpoint["generator"])
     print("Networks loaded:", filename)
 except:
     pass
-
 
 #%% Training
 minibatch_size = 32
