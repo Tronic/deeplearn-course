@@ -3,6 +3,8 @@ from glob import glob
 from PIL import Image
 import numpy as np
 import re
+import torch
+import torch.nn as nn
 from concurrent.futures import ThreadPoolExecutor
 
 filenames = glob("UTKFace/*.jpg")
@@ -41,3 +43,19 @@ for i, n in enumerate(filenames):
 # Load JPEGs into Numpy array using multiple threads
 with ThreadPoolExecutor() as exec:
     images = list(exec.map(lambda n: np.array(Image.open(n)), filenames))
+
+class Torch:
+    def __init__(self, device=None):
+        self.images = torch.tensor(np.transpose(images, (0, 3, 1, 2)), device=device, dtype=torch.uint8)
+
+    def batch_iter(self, batch_size, image_size=200):
+        """Make a random-sampling iterator that outputs images in batches."""
+        while True:
+            batch = np.random.randint(N - batch_size)
+            batch = slice(batch, batch + batch_size)
+            real = self.images[batch].to(torch.float32)
+            real /= 128.0
+            real -= 1.0
+            if image_size != real.size(2):
+                real = nn.functional.interpolate(real, image_size, mode="area")
+            yield real
