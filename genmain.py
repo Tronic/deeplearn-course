@@ -11,10 +11,10 @@ import visualization
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 faces = facedata.Torch(device=device)
 
-base_size = 5
+base_size = 10
 image_size = base_size << 5  # 160px max size
 discriminator_channels = 64
-generator_channels = 32
+generator_channels = 64
 
 #%% Network definition
 
@@ -24,7 +24,7 @@ class DownConvLayer(nn.Module):
     def __init__(self, channels):
         super().__init__()
         self.seq = nn.Sequential(
-            nn.Conv2d(channels, channels, kernel_size=5, padding=2), nn.LeakyReLU(0.25, inplace=True),
+#            nn.Conv2d(channels, channels, kernel_size=5, padding=2), nn.LeakyReLU(0.25, inplace=True),
             nn.Conv2d(channels, channels, kernel_size=5, padding=2), nn.MaxPool2d(2), nn.LeakyReLU(0.25, inplace=True),
         )
 
@@ -68,8 +68,8 @@ class UpConvLayer(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
         self.seq = nn.Sequential(
-            nn.ConvTranspose2d(in_channels, out_channels, kernel_size=3, padding=1, bias=False), nn.Tanh(),
-            nn.ConvTranspose2d(out_channels, out_channels, kernel_size=5, padding=2, bias=False), nn.Tanh(),
+            nn.ConvTranspose2d(in_channels, out_channels, kernel_size=5, padding=2, bias=False), nn.Tanh(),
+#            nn.ConvTranspose2d(out_channels, out_channels, kernel_size=5, padding=2, bias=False), nn.Tanh(),
         )
 
     def forward(self, x):
@@ -165,9 +165,9 @@ except:
 #%% Training
 minibatch_size = 32
 rounds = range(64000 // minibatch_size if device.type == "cuda" else 10)
-epochs = range(1)
+epochs = range(100)
 
-d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=0.0001, betas=(.5, .999))
+d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=0.0003, betas=(.5, .999))
 g_optimizer = torch.optim.Adam([
     {"params": generator.latimg.parameters(), "lr": 0.0005},
     {"params": generator.lat.parameters(), "lr": 0.0005},
@@ -218,15 +218,15 @@ def training():
                 ])).view(2, minibatch_size).mean(dim=1).cpu().numpy()
                 level_diff = level_real - level_fake
                 stats = f"{g_rounds:04d}:{d_rounds:04d}  {level_real:4.0%} vs{level_fake:4.0%}  {(time.perf_counter() - rtimer) / (r + .1) * len(rounds):3.0f} s/epoch"
-                if r == rounds[-1]:
-                    print(f"\r  Epoch {e:2}/{len(epochs)} {isize:3}px done   » {stats}", end="\N{ESC}[K\n")
-                else:
-                    print(f"\r  [{'*' * (25 * r // rounds[-1]):25s}] {stats}", end="\N{ESC}[K")
+                bar = f"[{'*' * (25 * r // rounds[-1]):25s}]"
+                alp = 4 * " ░▒▓█"[int(alpha * 4)]
+                print(f"\r  {bar} {stats} {alp}", end="\N{ESC}[K")
                 if level_diff > 0.2: break  # Good enough
                 for param_group in d_optimizer.param_groups: param_group['lr'] = 0.0001
             if level_diff > 0.7:
                 for param_group in d_optimizer.param_groups: param_group['lr'] *= 0.9
-            visualize(generator, discriminator, image_size=isize, alpha=alpha)
+            visualize(generator, discriminator, f"{isize:3}px {bar} alpha {alp} »  G:D {stats}", image_size=isize, alpha=alpha)
+        print(f"\r  Epoch {e:2}/{len(epochs)} {isize:3}px done   » {stats}", end="\N{ESC}[K\n")
         torch.save({
             "generator": generator.state_dict(),
             "discriminator": discriminator.state_dict(),
