@@ -14,12 +14,13 @@ except:
     pass
 
 class Base:
-    def __init__(self, shape=(), device=None):
+    def __init__(self, generator, shape=(), device=None):
+        self.generator = generator
         self.shape = np.array(shape, dtype=np.int)
         self.z = latent.random(self.shape.prod(), device=device)
-    def generate(self, generator, genargs):
+    def generate(self, genargs):
         with torch.no_grad():
-            fake = generator(self.z, **genargs)
+            fake = self.generator(self.z, **genargs)
             return ((fake + 1.0) * 127.5)
     def to_cpu(self, imgtensor):
         s = imgtensor.size(2)
@@ -27,12 +28,12 @@ class Base:
 
 
 class PNG(Base):
-    def __init__(self, rows=4, cols=8, device=None):
-        super().__init__((rows, cols), device=device)
+    def __init__(self, generator, rows=4, cols=8, device=None):
+        super().__init__(generator, (rows, cols), device=device)
         self.counter = 0
 
-    def __call__(self, generator, discriminator, stats, **genargs):
-        fake = self.to_cpu(self.generate(generator, genargs))
+    def __call__(self, stats, **genargs):
+        fake = self.to_cpu(self.generate(genargs))
         s = fake.shape[2]
         fh, fw = s * self.shape  # Full height and width of collated image
         img = np.empty((fh, fw, 3), dtype=np.uint8)
@@ -43,12 +44,13 @@ class PNG(Base):
         self.counter += 1
 
 class Video(Base):
-    def __init__(self, rows=4, cols=8, device=None):
-        super().__init__((rows, cols), device=device)
+    """Output to training.mkv in current directory. Hardcoded for 160px images in 8x4 layout."""
+    def __init__(self, generator, device=None):
+        super().__init__(generator, (4, 8), device=device)
 
     def __enter__(self):
         self.ffmpeg = subprocess.Popen(
-            'ffmpeg -framerate 60 -s 1280x660 -f rawvideo -pix_fmt rgb24 -i pipe: -c:v libx264 -crf 18 -y out.mkv'.split(),
+            'ffmpeg -framerate 60 -s 1280x660 -f rawvideo -pix_fmt rgb24 -i pipe: -c:v libx264 -crf 18 -y training.mkv'.split(),
             stdin=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
 
@@ -58,16 +60,16 @@ class Video(Base):
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.ffmpeg.stdin.close()
         self.ffmpeg.wait(10)
-        print("Saved to out.mkv")
+        print("Saved to training.mkv")
 
-    def __call__(self, generator, discriminator, stats, **genargs):
-        fake = self.generate(generator, genargs)
+    def __call__(self, stats, **genargs):
+        fake = self.generate(genargs)
         fake = nn.functional.interpolate(fake, 160)
         fake = self.to_cpu(fake)
         s = fake.shape[2]
         fh, fw = s * self.shape  # Full height and width of collated image
         assert fw == 1280 and fh == 640
-        fh += 20
+        fh += 20  # For stats text
         img = np.empty((fh, fw, 3), dtype=np.uint8)
         for r, c in np.ndindex(*self.shape):
             ir, ic = r * s, c * s

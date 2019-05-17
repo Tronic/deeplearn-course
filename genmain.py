@@ -142,8 +142,6 @@ del g_output, d_output
 
 
 #%% Init GAN
-visualize = visualization.Video(device=device)
-
 discriminator = Discriminator()
 generator = Generator()
 
@@ -221,15 +219,16 @@ def training():
                 alp = 4 * " ░▒▓█"[int(alpha * 4)]
                 print(f"\r  {bar} {stats} {alp}", end="\N{ESC}[K")
                 if level_diff > 0.2: break  # Good enough
-                for param_group in d_optimizer.param_groups: param_group['lr'] = 0.0001
             if level_diff > 0.7:
                 for param_group in d_optimizer.param_groups: param_group['lr'] *= 0.9
-            visualize(generator, discriminator, f"{isize:3}px {bar} alpha {alp} »  G:D {stats}", image_size=isize, alpha=alpha)
+            visualize(f"{isize:3}px {bar} alpha {alp} »  G:D {stats}", image_size=isize, alpha=alpha)
         print(f"\r  Epoch {e:2}/{len(epochs)} {isize:3}px done   » {stats}", end="\N{ESC}[K\n")
         torch.save({
             "generator": generator.state_dict(),
             "discriminator": discriminator.state_dict(),
         }, f"facegen{e:03}.pth")
+        # After each epoch, reduce generator learning rates
+        for param_group in g_optimizer.param_groups: param_group['lr'] *= 0.5
 
-with visualize:
+with visualization.Video(generator, device=device) as visualize:
     training()
