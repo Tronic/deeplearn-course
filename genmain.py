@@ -24,8 +24,8 @@ class DownConvLayer(nn.Module):
     def __init__(self, channels):
         super().__init__()
         self.seq = nn.Sequential(
-            nn.Conv2d(channels, channels, kernel_size=5, padding=2), nn.LeakyReLU(0.25, inplace=True),
-            nn.Conv2d(channels, channels, kernel_size=5, padding=2), nn.MaxPool2d(2), nn.LeakyReLU(0.25, inplace=True),
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1), nn.LeakyReLU(0.25, inplace=True),
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1), nn.MaxPool2d(2), nn.LeakyReLU(0.25, inplace=True),
         )
 
     def forward(self, x):
@@ -160,7 +160,7 @@ except:
     pass
 
 #%% Training
-minibatch_size = 32
+minibatch_size = 16
 rounds = range(64000 // minibatch_size if device.type == "cuda" else 10)
 epochs = range(6)
 
