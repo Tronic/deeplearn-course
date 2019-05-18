@@ -189,7 +189,7 @@ def training():
         images = faces.batch_iter(minibatch_size, image_size=image_size)
         rtimer = time.perf_counter()
         for r in rounds:
-            alpha = min(1.0, alpha + 2 / len(rounds))  # Alpha blending after switching to bigger resolution
+            alpha = min(1.0, alpha + 3 / len(rounds))  # Alpha blending after switching to bigger resolution
             # Make a set of fakes
             z = latent.random(minibatch_size, device=device)
             g_optimizer.zero_grad()
