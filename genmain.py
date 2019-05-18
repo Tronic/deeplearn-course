@@ -122,13 +122,13 @@ class Generator(nn.Module):
             if x.size(2) >= image_size: break
             lat = nn.functional.interpolate(lat_full, x.size(2))
             x_prev, x = x, upconv(torch.cat((x, lat), dim=1))
-            # Minimize correlation between samples
-            if train:
-                x0 = x.detach()
-                x1 = torch.cat((x0[1:], x0[0:1]), dim=0)
-                xd = x1 - x0
-                scale = alpha / x.numel() / (abs(xd) + 0.1)**2
-                x.backward(scale * xd.sign(), retain_graph=True)
+        # Minimize correlation between samples
+        if train:
+            x0 = x.detach()
+            x1 = torch.cat((x0[1:], x0[0:1]), dim=0)
+            xd = x1 - x0
+            scale = alpha / x.numel() / (abs(xd) + 0.1)**2
+            x.backward(scale * xd.sign(), retain_graph=True)
         # Alpha blending between the last two layers
         if alpha < 1 and "x_prev" in locals():
             x_prev = nn.functional.interpolate(x_prev, scale_factor=2, mode="bilinear", align_corners=False)
