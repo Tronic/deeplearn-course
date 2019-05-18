@@ -11,7 +11,7 @@ torch.random.manual_seed(0)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 faces = facedata.Torch(device=device)
 
-base_size = 10  # px
+base_size = 20  # px
 max_size = 160  # px
 n_layers = (max_size // base_size).bit_length() - 1  # Discriminator and Generator layer count
 discriminator_channels = 128
