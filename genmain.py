@@ -186,7 +186,7 @@ def training():
         d_rounds = g_rounds = 0
         rtimer = time.perf_counter()
         for r in rounds:
-            alpha = min(1.0, 4 * r / len(rounds))  # Alpha blending after switching to bigger resolution
+            alpha = min(1.0, 2 * r / len(rounds))  # Alpha blending after switching to bigger resolution
             # Make a set of fakes
             z = latent.random(minibatch_size, device=device)
             g_optimizer.zero_grad()
