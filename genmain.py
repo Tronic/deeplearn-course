@@ -166,7 +166,7 @@ minibatch_size = 16
 rounds = range(64000 // minibatch_size if device.type == "cuda" else 10)
 epochs = range(6)
 
-d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=0.0003, betas=(.5, .999))
+d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=0.0001, betas=(.5, .999))
 g_optimizer = torch.optim.Adam([
     {"params": generator.latimg.parameters(), "lr": 0.0005},
     {"params": generator.lat.parameters(), "lr": 0.0005},
