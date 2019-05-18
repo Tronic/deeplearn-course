@@ -186,23 +186,22 @@ def training():
         d_rounds = g_rounds = 0
         rtimer = time.perf_counter()
         noise = 0.0
-        for r in rounds:
+        for r, real in enumerate(images):
             alpha = min(1.0, 2 * r / len(rounds))  # Alpha blending after switching to bigger resolution
             # Make a set of fakes
             z = latent.random(minibatch_size, device=device)
             g_optimizer.zero_grad()
             fake = generator(z, image_size=image_size, alpha=alpha, train=True)
-            if noise: fake = fake + noise * torch.randn_like(fake)
+            assert real.shape == fake.shape
             # Train the generator
             loss = criterion(discriminator(fake, alpha), ones)
             fake = fake.detach()  # Drop gradients (we don't want more generator updates)
             loss.backward()
             g_optimizer.step()
             g_rounds += 1
-            # Prepare images for discriminator training
-            real = next(images)
-            assert real.shape == fake.shape
-            if noise: real += noise * torch.randn_like(real)
+            if noise:
+                real += noise * torch.randn_like(real)
+                fake += noise * torch.randn_like(fake)
             # Train the discriminator
             d_optimizer.zero_grad()
             output_fake = discriminator(fake, alpha)
