@@ -185,57 +185,55 @@ def training():
         images = faces.batch_iter(minibatch_size, image_size=image_size)
         d_rounds = g_rounds = 0
         rtimer = time.perf_counter()
+        noise = 0.0
         for r in rounds:
             alpha = min(1.0, 2 * r / len(rounds))  # Alpha blending after switching to bigger resolution
             # Make a set of fakes
             z = latent.random(minibatch_size, device=device)
             g_optimizer.zero_grad()
             fake = generator(z, image_size=image_size, alpha=alpha, train=True)
+            if noise: fake = fake + noise * torch.randn_like(fake)
             # Train the generator
             loss = criterion(discriminator(fake, alpha), ones)
             fake = fake.detach()  # Drop gradients (we don't want more generator updates)
             loss.backward()
             g_optimizer.step()
             g_rounds += 1
-            # Train the discriminator one time or until it is good enough
-            for real in images:  # Infinite loop of random sample images
-                assert real.shape == fake.shape
-                # Discriminate real and fake images
-                d_optimizer.zero_grad()
-                noise = 0.1
-                output_fake = discriminator(fake + noise * torch.randn_like(fake), alpha)
-                output_real = discriminator(real + noise * torch.randn_like(real), alpha)
-                # Train the discriminator
-                criterion(output_real, ones).backward()
-                criterion(output_fake, zeros).backward()
-                d_optimizer.step()
-                d_rounds += 1
-                # Check levels
-                level_real, level_fake = torch.sigmoid(torch.stack([
-                    output_real.detach(),
-                    output_fake.detach()
-                ])).view(2, minibatch_size).mean(dim=1).cpu().numpy()
-                level_diff = level_real - level_fake
-                glr = g_optimizer.param_groups[0]['lr']
-                dlr = d_optimizer.param_groups[0]['lr']
-                stats = f"{g_rounds:04d}:{d_rounds:04d}  lr={glr*1e6:03.0f}:{dlr*1e6:03.0f}µ {level_real:4.0%} vs{level_fake:4.0%}  {(time.perf_counter() - rtimer) / (r + .1) * len(rounds):3.0f} s/epoch"
-                bar = f"[{'*' * (25 * r // rounds[-1]):25s}]"
-                alp = 4 * " ░▒▓█"[int(alpha * 4)]
-                print(f"\r  {bar} {stats} {alp}", end="\N{ESC}[K")
-                if level_diff > 0.2: break  # Good enough
-                for param_group in d_optimizer.param_groups: param_group['lr'] += 1e-6
-                #for param_group in d_optimizer.param_groups: param_group['lr'] *= 1.1
-            if level_diff > 0.95:
-                for param_group in d_optimizer.param_groups: param_group['lr'] *= 0.999
-
+            # Prepare images for discriminator training
+            real = next(images)
+            assert real.shape == fake.shape
+            if noise: real += noise * torch.randn_like(real)
+            # Train the discriminator
+            d_optimizer.zero_grad()
+            output_fake = discriminator(fake, alpha)
+            output_real = discriminator(real, alpha)
+            # Train the discriminator
+            criterion(output_real, ones).backward()
+            criterion(output_fake, zeros).backward()
+            d_optimizer.step()
+            d_rounds += 1
+            # Check levels
+            level_real, level_fake = torch.sigmoid(torch.stack([
+                output_real.detach(),
+                output_fake.detach()
+            ])).view(2, minibatch_size).mean(dim=1).cpu().numpy()
+            level_diff = level_real - level_fake
+            if level_diff > 0.95: noise += 0.001
+            elif level_diff < 0.20: noise *= 0.99
+            glr = g_optimizer.param_groups[0]['lr']
+            stats = f"{g_rounds:04d}:{d_rounds:04d}  lr={glr*1e6:03.0f}µ noise={noise:.3f} {level_real:4.0%} vs{level_fake:4.0%}  {(time.perf_counter() - rtimer) / (r + .1) * len(rounds):3.0f} s/epoch"
+            bar = f"[{'*' * (25 * r // rounds[-1]):25s}]"
+            alp = 4 * " ░▒▓█"[int(alpha * 4)]
+            print(f"\r  {bar} {stats} {alp}", end="\N{ESC}[K")
             visualize(f"{image_size:3}px {bar} alpha {alp} »  G:D {stats}", image_size=image_size, alpha=alpha)
         print(f"\r  Epoch {e:2}/{len(epochs)} {image_size:3}px done   » {stats}", end="\N{ESC}[K\n")
         torch.save({
             "generator": generator.state_dict(),
             "discriminator": discriminator.state_dict(),
         }, f"facegen{e:03}.pth")
-        # After each epoch, reduce generator learning rates
-        for param_group in g_optimizer.param_groups: param_group['lr'] *= 0.8
+        # After each epoch, reduce learning rates
+        for param_group in g_optimizer.param_groups + d_optimizer.param_groups:
+            param_group['lr'] *= 0.8
 
 with visualization.Video(generator, device=device) as visualize:
     training()
