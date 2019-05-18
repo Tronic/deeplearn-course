@@ -218,8 +218,8 @@ def training():
                 output_fake.detach()
             ])).view(2, minibatch_size).mean(dim=1).cpu().numpy()
             level_diff = level_real - level_fake
-            if level_diff > 0.95: noise += 0.001
-            elif level_diff < 0.20: noise *= 0.99
+            if level > 0.95: noise += 0.001
+            elif level < 0.5: noise *= 0.99
             glr = g_optimizer.param_groups[0]['lr']
             stats = f"{g_rounds:04d}:{d_rounds:04d}  lr={glr*1e6:03.0f}µ noise={noise:.3f} {level_real:4.0%} vs{level_fake:4.0%}  {(time.perf_counter() - rtimer) / (r + .1) * len(rounds):3.0f} s/epoch"
             bar = f"[{'*' * (25 * r // rounds[-1]):25s}]"
