@@ -184,7 +184,6 @@ def training():
     for e in epochs:
         if image_size < max_size: image_size *= 2
         images = faces.batch_iter(minibatch_size, image_size=image_size)
-        d_rounds = g_rounds = 0
         rtimer = time.perf_counter()
         for r in rounds:
             alpha = min(1.0, 2 * r / len(rounds))  # Alpha blending after switching to bigger resolution
@@ -197,7 +196,6 @@ def training():
             fake = fake.detach()  # Drop gradients (we don't want more generator updates)
             loss.backward()
             g_optimizer.step()
-            g_rounds += 1
             # Prepare images for discriminator training
             real = next(images)
             assert real.shape == fake.shape
@@ -211,7 +209,6 @@ def training():
             criterion(output_real, ones).backward()
             criterion(output_fake, zeros).backward()
             d_optimizer.step()
-            d_rounds += 1
             # Check levels
             level_real, level_fake = torch.sigmoid(torch.stack([
                 output_real.detach(),
@@ -221,12 +218,12 @@ def training():
             if level_diff > 0.95: noise += 0.001
             elif level_diff < 0.5: noise *= 0.99
             glr = g_optimizer.param_groups[0]['lr']
-            stats = f"lr={glr*1e6:03.0f}µ noise={noise//1000}m {level_real:4.0%} vs{level_fake:4.0%}  {(time.perf_counter() - rtimer) / (r + .1) * len(rounds):3.0f} s/epoch"
-            bar = f"Epoch {e:2} {image_size:3}px [{'*' * (25 * r // rounds[-1]):25s}] {r:04d}"
+            stats = f"lr={glr*1e6:03.0f}µ 𝜀={noise//1000:03.0f}m {level_real:4.0%} vs{level_fake:4.0%}  {(time.perf_counter() - rtimer) / (r + .1) * len(rounds):3.0f} s/epoch"
+            bar = f"Epoch {e:2} {image_size:3}px [{'*' * (20 * r // rounds[-1]):20s}] {r+1:04d}"
             alp = 4 * " ░▒▓█"[int(alpha * 4)]
-            print(f"\r  {bar} {stats} {alp}", end="\N{ESC}[K")
-            visualize(f"{bar} alpha {alp} »  G:D {stats}", image_size=image_size, alpha=alpha)
-        print(f"\r  Epoch {e:2}/{len(epochs)} {image_size:3}px done   » {stats}", end="\N{ESC}[K\n")
+            visualize(f"{bar} alpha {alp} » {stats}", image_size=image_size, alpha=alpha)
+            print(f"\r  {bar} {alp} {stats} ", end="\N{ESC}[K")
+        print()
         torch.save({
             "generator": generator.state_dict(),
             "discriminator": discriminator.state_dict(),
