@@ -14,7 +14,7 @@ faces = facedata.Torch(device=device)
 # Network settings
 discriminator_channels = 32
 generator_channels = 128
-n_layers = 4
+n_layers = 3
 max_size = 160  # px
 base_size = max_size >> n_layers
 
