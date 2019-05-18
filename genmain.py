@@ -12,8 +12,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 faces = facedata.Torch(device=device)
 
 # Network settings
-discriminator_channels = 128
-generator_channels = 32
+discriminator_channels = 16
+generator_channels = 64
 n_layers = 4
 max_size = 160  # px
 base_size = max_size >> n_layers
