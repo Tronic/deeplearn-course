@@ -1,5 +1,4 @@
 import facedata
-import numpy as np
 import torch
 import torch.nn as nn
 import time
@@ -8,6 +7,7 @@ import visualization
 
 #%% Setup
 
+torch.random.manual_seed(0)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 faces = facedata.Torch(device=device)
 
@@ -186,19 +186,21 @@ def training():
         d_rounds = g_rounds = 0
         rtimer = time.perf_counter()
         noise = 0.0
-        for r, real in enumerate(images):
+        for r in rounds:
             alpha = min(1.0, 2 * r / len(rounds))  # Alpha blending after switching to bigger resolution
             # Make a set of fakes
             z = latent.random(minibatch_size, device=device)
             g_optimizer.zero_grad()
             fake = generator(z, image_size=image_size, alpha=alpha, train=True)
-            assert real.shape == fake.shape
             # Train the generator
             loss = criterion(discriminator(fake, alpha), ones)
             fake = fake.detach()  # Drop gradients (we don't want more generator updates)
             loss.backward()
             g_optimizer.step()
             g_rounds += 1
+            # Prepare images for discriminator training
+            real = next(images)
+            assert real.shape == fake.shape
             if noise:
                 real += noise * torch.randn_like(real)
                 fake += noise * torch.randn_like(fake)
@@ -206,7 +208,6 @@ def training():
             d_optimizer.zero_grad()
             output_fake = discriminator(fake, alpha)
             output_real = discriminator(real, alpha)
-            # Train the discriminator
             criterion(output_real, ones).backward()
             criterion(output_fake, zeros).backward()
             d_optimizer.step()
