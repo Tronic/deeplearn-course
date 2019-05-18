@@ -220,6 +220,7 @@ def training():
                 alp = 4 * " ░▒▓█"[int(alpha * 4)]
                 print(f"\r  {bar} {stats} {alp}", end="\N{ESC}[K")
                 if level_diff > 0.2: break  # Good enough
+                for param_group in d_optimizer.param_groups: param_group['lr'] += 1e-6
                 #for param_group in d_optimizer.param_groups: param_group['lr'] *= 1.1
             if level_diff > 0.99:
                 for param_group in d_optimizer.param_groups: param_group['lr'] *= 0.99
