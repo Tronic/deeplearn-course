@@ -233,6 +233,6 @@ def training():
             param_group['lr'] *= 0.8
         if image_size < max_size:
             image_size *= 2
-            alpha = 1.0
+            alpha = 0.0
 with visualization.Video(generator, device=device) as visualize:
     training()
