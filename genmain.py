@@ -176,14 +176,13 @@ def training():
     print(f"Training with {len(rounds)} rounds per epoch:")
     ones = torch.ones((minibatch_size, 1), device=device)
     zeros = torch.zeros((minibatch_size, 1), device=device)
-    level_real = level_fake = 0.5
     criterion = nn.BCEWithLogitsLoss()
     isize = base_size
     for e in epochs:
-        d_rounds = g_rounds = 0
-        rtimer = time.perf_counter()
         if isize < image_size: isize *= 2
         images = faces.batch_iter(minibatch_size, image_size=isize)
+        d_rounds = g_rounds = 0
+        rtimer = time.perf_counter()
         for r in rounds:
             alpha = min(1.0, 4 * r / len(rounds))  # Alpha blending after switching to bigger resolution
             # Make a set of fakes
