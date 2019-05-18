@@ -223,8 +223,8 @@ def training():
                 print(f"\r  {bar} {stats} {alp}", end="\N{ESC}[K")
                 if level_diff > 0.2: break  # Good enough
                 #for param_group in d_optimizer.param_groups: param_group['lr'] *= 1.1
-            if level_diff > 0.99:
-                for param_group in d_optimizer.param_groups: param_group['lr'] *= 0.99
+            if level_diff > 0.95:
+                for param_group in d_optimizer.param_groups: param_group['lr'] *= 0.999
 
             visualize(f"{isize:3}px {bar} alpha {alp} »  G:D {stats}", image_size=isize, alpha=alpha)
         print(f"\r  Epoch {e:2}/{len(epochs)} {isize:3}px done   » {stats}", end="\N{ESC}[K\n")
