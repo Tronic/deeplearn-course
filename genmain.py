@@ -218,8 +218,8 @@ def training():
                 level_diff = level_real - level_fake
                 glr = g_optimizer.param_groups[0]['lr']
                 dlr = d_optimizer.param_groups[0]['lr']
-                stats = f"{g_rounds:04d}:{d_rounds:04d}  lr={glr*1e6:03.0f}:{dlr*1e6:03.0f}µ {level_real:4.0%} vs{level_fake:4.0%}  {(time.perf_counter() - rtimer) / (r + .1) * len(rounds):3.0f} s/epoch"
-                bar = f"[{'*' * (25 * r // rounds[-1]):25s}]"
+                stats = f"lr={glr*1e6:03.0f}:{dlr*1e6:03.0f}µ {level_real:4.0%} vs{level_fake:4.0%}  {(time.perf_counter() - rtimer) / (r + .1) * len(rounds):3.0f} s/epoch"
+                bar = f"[{'*' * (25 * r // rounds[-1]):25s}] {r:04d}"
                 alp = 4 * " ░▒▓█"[int(alpha * 4)]
                 print(f"\r  {bar} {stats} {alp}", end="\N{ESC}[K")
                 if level_diff > 0.2: break  # Good enough
@@ -228,8 +228,8 @@ def training():
             if level_diff > 0.95:
                 for param_group in d_optimizer.param_groups: param_group['lr'] *= 0.999
 
-            visualize(f"{image_size:3}px {bar} alpha {alp} »  G:D {stats}", image_size=image_size, alpha=alpha)
-        print(f"\r  Epoch {e:2}/{len(epochs)} {image_size:3}px done   » {stats}", end="\N{ESC}[K\n")
+            visualize(f"Epoch {e:2} {image_size:3}px {bar} alpha {alp} {stats} » ", image_size=image_size, alpha=alpha)
+        print(f"\r  Epoch {e:2}/{len(epochs)} {image_size:3}px done    » {stats}", end="\N{ESC}[K\n")
         torch.save({
             "generator": generator.state_dict(),
             "discriminator": discriminator.state_dict(),
