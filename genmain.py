@@ -202,8 +202,8 @@ def training():
                 assert real.shape == fake.shape
                 # Discriminate real and fake images
                 d_optimizer.zero_grad()
-                output_fake = discriminator(fake, alpha)
-                output_real = discriminator(real, alpha)
+                output_fake = discriminator(fake + torch.randn_like(fake), alpha)
+                output_real = discriminator(real + torch.randn_like(fake), alpha)
                 # Train the discriminator
                 criterion(output_real, ones).backward()
                 criterion(output_fake, zeros).backward()
