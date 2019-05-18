@@ -44,9 +44,9 @@ def training():
     d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=0.001, betas=(.5, .999))
     g_optimizer = torch.optim.Adam([
         {"params": generator.latimg.parameters(), "lr": 0.0005},
-        {"params": generator.lat.parameters(), "lr": 0.0005},
+        {"params": generator.lat.parameters(), "lr": 0.0001},
         {"params": generator.upc.parameters(), "lr": 0.00003},
-        {"params": generator.toRGB.parameters(), "lr": 0.001},
+        {"params": generator.toRGB.parameters(), "lr": 0.0005},
     ], betas=(.8, .99))
     image_size = base_size
     noise = alpha = 0.0
