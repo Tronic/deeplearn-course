@@ -173,7 +173,7 @@ def training():
     ones = torch.ones((minibatch_size, 1), device=device)
     zeros = torch.zeros((minibatch_size, 1), device=device)
     criterion = nn.BCEWithLogitsLoss()
-    d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=0.0004, betas=(.5, .999))
+    d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=0.001, betas=(.5, .999))
     g_optimizer = torch.optim.Adam([
         {"params": generator.latimg.parameters(), "lr": 0.0005},
         {"params": generator.lat.parameters(), "lr": 0.0005},
