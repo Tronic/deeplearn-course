@@ -232,8 +232,9 @@ def training():
             "generator": generator.state_dict(),
             "discriminator": discriminator.state_dict(),
         }, f"facegen{e:03}.pth")
-        for param_group in g_optimizer.param_groups + d_optimizer.param_groups:
-            param_group['lr'] *= 0.8
+        # Reduce learning rates
+        for pg in g_optimizer.param_groups: pg['lr'] *= 0.8
+        for pg in d_optimizer.param_groups: pg['lr'] *= 0.6
 
 with visualization.Video(generator, device=device) as visualize:
     training()
