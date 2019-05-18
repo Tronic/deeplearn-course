@@ -221,7 +221,7 @@ def training():
             # Status & visualization
             glr = g_optimizer.param_groups[0]['lr']
             stats = f"lr={glr*1e6:03.0f}µ ε={noise//1000:03.0f}m {level_real:4.0%} vs{level_fake:4.0%}  {(time.perf_counter() - rtimer) / (r + .1) * len(rounds):3.0f} s/epoch"
-            bar = f"Epoch {e:2} {image_size:3}px [{'»' * (20 * r // rounds[-1]):20s}] {r+1:04d}"
+            bar = f"E{e:1} {image_size:3}px [{'»' * (20 * r // rounds[-1]):20s}] {r+1:04d}"
             alp = 4 * " ░▒▓█"[int(alpha * 4)]
             visualize(f"{bar} alpha {alp} » {stats}", image_size=image_size, alpha=alpha)
             print(f"\r  {bar} {alp} {stats} ", end="\N{ESC}[K")
