@@ -14,7 +14,7 @@ faces = facedata.Torch(device=device)
 base_size = 10  # px
 max_size = 160  # px
 n_layers = (max_size // base_size).bit_length() - 1  # Discriminator and Generator layer count
-discriminator_channels = 32
+discriminator_channels = 128
 generator_channels = 32
 
 #%% Network definition
@@ -181,23 +181,22 @@ def training():
     criterion = nn.BCEWithLogitsLoss()
     image_size = base_size
     noise = 0.0
+    alpha = 1.0
     for e in epochs:
-        if image_size < max_size: image_size *= 2
         images = faces.batch_iter(minibatch_size, image_size=image_size)
         rtimer = time.perf_counter()
         for r in rounds:
-            alpha = min(1.0, 2 * r / len(rounds))  # Alpha blending after switching to bigger resolution
+            alpha = min(1.0, alpha + 2 / len(rounds))  # Alpha blending after switching to bigger resolution
             # Make a set of fakes
             z = latent.random(minibatch_size, device=device)
             g_optimizer.zero_grad()
             fake = generator(z, image_size=image_size, alpha=alpha, train=True)
             # Train the generator
-            loss = criterion(discriminator(fake, alpha), ones)
-            fake = fake.detach()  # Drop gradients (we don't want more generator updates)
-            loss.backward()
+            criterion(discriminator(fake, alpha), ones).backward()
             g_optimizer.step()
             # Prepare images for discriminator training
             real = next(images)
+            fake = fake.detach()  # Drop gradients (we don't want more generator updates)
             assert real.shape == fake.shape
             if noise:
                 real += noise * torch.randn_like(real)
@@ -224,14 +223,16 @@ def training():
             alp = 4 * " ░▒▓█"[int(alpha * 4)]
             visualize(f"{bar} alpha {alp} » {stats}", image_size=image_size, alpha=alpha)
             print(f"\r  {bar} {alp} {stats} ", end="\N{ESC}[K")
+        # After an epoch is finished:
         print()
         torch.save({
             "generator": generator.state_dict(),
             "discriminator": discriminator.state_dict(),
         }, f"facegen{e:03}.pth")
-        # After each epoch, reduce learning rates
         for param_group in g_optimizer.param_groups + d_optimizer.param_groups:
             param_group['lr'] *= 0.8
-
+        if image_size < max_size:
+            image_size *= 2
+            alpha = 1.0
 with visualization.Video(generator, device=device) as visualize:
     training()
