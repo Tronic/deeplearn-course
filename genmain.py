@@ -12,7 +12,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 faces = facedata.Torch(device=device)
 
 base_size = 10
-image_size = base_size << 5  # 160px max size
+max_size = 160
 discriminator_channels = 64
 generator_channels = 64
 
@@ -115,7 +115,7 @@ class Generator(nn.Module):
         self.upc = nn.ModuleList([UpConvLayer(2 * channels, channels) for i in range(n_layers)])
         self.toRGB = ToRGB(channels)  # Map channels to colors
 
-    def forward(self, latent, image_size=image_size, alpha=1, train=False):
+    def forward(self, latent, image_size=max_size, alpha=1, train=False):
         x = self.latimg(latent).view(-1, self.channels, self.base_size, self.base_size)
         lat_full = self.lat(latent)
         for i, upconv in enumerate(self.upc):
@@ -179,10 +179,10 @@ def training():
     ones = torch.ones((minibatch_size, 1), device=device)
     zeros = torch.zeros((minibatch_size, 1), device=device)
     criterion = nn.BCEWithLogitsLoss()
-    isize = base_size
+    image_size = base_size
     for e in epochs:
-        if isize < image_size: isize *= 2
-        images = faces.batch_iter(minibatch_size, image_size=isize)
+        if image_size < max_size: image_size *= 2
+        images = faces.batch_iter(minibatch_size, image_size=image_size)
         d_rounds = g_rounds = 0
         rtimer = time.perf_counter()
         for r in rounds:
@@ -190,7 +190,7 @@ def training():
             # Make a set of fakes
             z = latent.random(minibatch_size, device=device)
             g_optimizer.zero_grad()
-            fake = generator(z, image_size=isize, alpha=alpha, train=True)
+            fake = generator(z, image_size=image_size, alpha=alpha, train=True)
             # Train the generator
             loss = criterion(discriminator(fake, alpha), ones)
             fake = fake.detach()  # Drop gradients (we don't want more generator updates)
@@ -227,8 +227,8 @@ def training():
             if level_diff > 0.95:
                 for param_group in d_optimizer.param_groups: param_group['lr'] *= 0.999
 
-            visualize(f"{isize:3}px {bar} alpha {alp} »  G:D {stats}", image_size=isize, alpha=alpha)
-        print(f"\r  Epoch {e:2}/{len(epochs)} {isize:3}px done   » {stats}", end="\N{ESC}[K\n")
+            visualize(f"{image_size:3}px {bar} alpha {alp} »  G:D {stats}", image_size=image_size, alpha=alpha)
+        print(f"\r  Epoch {e:2}/{len(epochs)} {image_size:3}px done   » {stats}", end="\N{ESC}[K\n")
         torch.save({
             "generator": generator.state_dict(),
             "discriminator": discriminator.state_dict(),
