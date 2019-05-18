@@ -127,7 +127,7 @@ class Generator(nn.Module):
             x0 = x.detach()
             x1 = torch.cat((x0[1:], x0[0:1]), dim=0)
             xd = x1 - x0
-            scale = 0.1 * alpha / x.numel() / (abs(xd) + 0.1)**2
+            scale = 0.1 / x.numel() / (abs(xd) + 0.1)**2
             x.backward(scale * xd.sign(), retain_graph=True)
         # Alpha blending between the last two layers
         if alpha < 1 and "x_prev" in locals():
