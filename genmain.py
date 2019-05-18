@@ -122,11 +122,13 @@ class Generator(nn.Module):
             if x.size(2) >= image_size: break
             lat = nn.functional.interpolate(lat_full, x.size(2))
             x_prev, x = x, upconv(torch.cat((x, lat), dim=1))
-            # Minimize correlation between samples
-            if train:
-                x1 = torch.cat((x[1:], x[0:1]), dim=0)
-                corr = (x * x1) / (abs(x) + abs(x1))**2
-                (10 * alpha * corr**2).mean().backward(retain_graph=True)
+        # Minimize correlation between samples
+        if train:
+            x0 = x.detach()
+            x1 = torch.cat((x0[1:], x0[0:1]), dim=0)
+            xd = x1 - x0
+            scale = alpha / x.numel() / (abs(xd) + 0.1)**2
+            x.backward(scale * xd.sign(), retain_graph=True)
         # Alpha blending between the last two layers
         if alpha < 1 and "x_prev" in locals():
             x_prev = nn.functional.interpolate(x_prev, scale_factor=2, mode="bilinear", align_corners=False)
@@ -222,8 +224,8 @@ def training():
                 if level_diff > 0.2: break  # Good enough
                 for param_group in d_optimizer.param_groups: param_group['lr'] += 1e-6
                 #for param_group in d_optimizer.param_groups: param_group['lr'] *= 1.1
-            if level_diff > 0.99:
-                for param_group in d_optimizer.param_groups: param_group['lr'] *= 0.99
+            if level_diff > 0.95:
+                for param_group in d_optimizer.param_groups: param_group['lr'] *= 0.999
 
             visualize(f"{isize:3}px {bar} alpha {alp} »  G:D {stats}", image_size=isize, alpha=alpha)
         print(f"\r  Epoch {e:2}/{len(epochs)} {isize:3}px done   » {stats}", end="\N{ESC}[K\n")
@@ -232,7 +234,7 @@ def training():
             "discriminator": discriminator.state_dict(),
         }, f"facegen{e:03}.pth")
         # After each epoch, reduce generator learning rates
-        for param_group in g_optimizer.param_groups: param_group['lr'] *= 0.5
+        for param_group in g_optimizer.param_groups: param_group['lr'] *= 0.8
 
 with visualization.Video(generator, device=device) as visualize:
     training()
