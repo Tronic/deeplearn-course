@@ -12,7 +12,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 faces = facedata.Torch(device=device)
 
 # Network settings
-discriminator_channels = 16
+discriminator_channels = 32
 generator_channels = 64
 n_layers = 4
 max_size = 160  # px
@@ -173,7 +173,7 @@ def training():
     ones = torch.ones((minibatch_size, 1), device=device)
     zeros = torch.zeros((minibatch_size, 1), device=device)
     criterion = nn.BCEWithLogitsLoss()
-    d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=0.0001, betas=(.5, .999))
+    d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=0.0004, betas=(.5, .999))
     g_optimizer = torch.optim.Adam([
         {"params": generator.latimg.parameters(), "lr": 0.0005},
         {"params": generator.lat.parameters(), "lr": 0.0005},
