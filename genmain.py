@@ -32,7 +32,7 @@ class DownConvLayer(nn.Module):
         super().__init__()
         self.seq = nn.Sequential(
             nn.Conv2d(channels, channels, kernel_size=3, padding=1), nn.LeakyReLU(0.25, inplace=True),
-            nn.Conv2d(channels, channels, kernel_size=3, padding=1), nn.MaxPool2d(2), nn.LeakyReLU(0.25, inplace=True),
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1), nn.AvgPool2d(2), nn.LeakyReLU(0.25, inplace=True),
         )
 
     def forward(self, x):
