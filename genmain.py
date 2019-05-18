@@ -125,9 +125,9 @@ class Generator(nn.Module):
             # Minimize correlation between samples
             if train:
                 x0 = x.detach()
-                #x1 = torch.cat((x0[1:], x0[0:1]), dim=0)
-                xd = x0 - x0.mean(dim=1, keepdim=True)
-                x.backward(xd.sign() / (abs(xd).mean(dim=1, keepdim=True) + 0.001), retain_graph=True)
+                x1 = torch.cat((x0[1:], x0[0:1]), dim=0)
+                xd = x0 - x1
+                x.backward(xd.sign() / (abs(xd) + 0.1)**2, retain_graph=True)
         # Alpha blending between the last two layers
         if alpha < 1 and "x_prev" in locals():
             x_prev = nn.functional.interpolate(x_prev, scale_factor=2, mode="bilinear", align_corners=False)
