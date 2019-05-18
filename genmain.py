@@ -1,5 +1,4 @@
 import facedata
-import numpy as np
 import torch
 import torch.nn as nn
 import time
@@ -8,6 +7,7 @@ import visualization
 
 #%% Setup
 
+torch.random.manual_seed(0)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 faces = facedata.Torch(device=device)
 
@@ -166,7 +166,7 @@ minibatch_size = 16
 rounds = range(64000 // minibatch_size if device.type == "cuda" else 10)
 epochs = range(6)
 
-d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=0.0003, betas=(.5, .999))
+d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=0.0001, betas=(.5, .999))
 g_optimizer = torch.optim.Adam([
     {"params": generator.latimg.parameters(), "lr": 0.0005},
     {"params": generator.lat.parameters(), "lr": 0.0005},
@@ -180,6 +180,7 @@ def training():
     zeros = torch.zeros((minibatch_size, 1), device=device)
     criterion = nn.BCEWithLogitsLoss()
     image_size = base_size
+    noise = 0.0
     for e in epochs:
         if image_size < max_size: image_size *= 2
         images = faces.batch_iter(minibatch_size, image_size=image_size)
@@ -197,45 +198,42 @@ def training():
             loss.backward()
             g_optimizer.step()
             g_rounds += 1
-            # Train the discriminator one time or until it is good enough
-            for real in images:  # Infinite loop of random sample images
-                assert real.shape == fake.shape
-                # Discriminate real and fake images
-                d_optimizer.zero_grad()
-                noise = 0.1
-                output_fake = discriminator(fake + noise * torch.randn_like(fake), alpha)
-                output_real = discriminator(real + noise * torch.randn_like(real), alpha)
-                # Train the discriminator
-                criterion(output_real, ones).backward()
-                criterion(output_fake, zeros).backward()
-                d_optimizer.step()
-                d_rounds += 1
-                # Check levels
-                level_real, level_fake = torch.sigmoid(torch.stack([
-                    output_real.detach(),
-                    output_fake.detach()
-                ])).view(2, minibatch_size).mean(dim=1).cpu().numpy()
-                level_diff = level_real - level_fake
-                glr = g_optimizer.param_groups[0]['lr']
-                dlr = d_optimizer.param_groups[0]['lr']
-                stats = f"lr={glr*1e6:03.0f}:{dlr*1e6:03.0f}µ {level_real:4.0%} vs{level_fake:4.0%}  {(time.perf_counter() - rtimer) / (r + .1) * len(rounds):3.0f} s/epoch"
-                bar = f"[{'*' * (25 * r // rounds[-1]):25s}] {r:04d}"
-                alp = 4 * " ░▒▓█"[int(alpha * 4)]
-                print(f"\r  {bar} {stats} {alp}", end="\N{ESC}[K")
-                if level_diff > 0.2: break  # Good enough
-                for param_group in d_optimizer.param_groups: param_group['lr'] += 1e-6
-                #for param_group in d_optimizer.param_groups: param_group['lr'] *= 1.1
-            if level_diff > 0.95:
-                for param_group in d_optimizer.param_groups: param_group['lr'] *= 0.999
-
-            visualize(f"Epoch {e:2} {image_size:3}px {bar} alpha {alp} {stats} » ", image_size=image_size, alpha=alpha)
-        print(f"\r  Epoch {e:2}/{len(epochs)} {image_size:3}px done    » {stats}", end="\N{ESC}[K\n")
+            # Prepare images for discriminator training
+            real = next(images)
+            assert real.shape == fake.shape
+            if noise:
+                real += noise * torch.randn_like(real)
+                fake += noise * torch.randn_like(fake)
+            # Train the discriminator
+            d_optimizer.zero_grad()
+            output_fake = discriminator(fake, alpha)
+            output_real = discriminator(real, alpha)
+            criterion(output_real, ones).backward()
+            criterion(output_fake, zeros).backward()
+            d_optimizer.step()
+            d_rounds += 1
+            # Check levels
+            level_real, level_fake = torch.sigmoid(torch.stack([
+                output_real.detach(),
+                output_fake.detach()
+            ])).view(2, minibatch_size).mean(dim=1).cpu().numpy()
+            level_diff = level_real - level_fake
+            if level_diff > 0.95: noise += 0.001
+            elif level_diff < 0.5: noise *= 0.99
+            glr = g_optimizer.param_groups[0]['lr']
+            stats = f"lr={glr*1e6:03.0f}µ noise={noise//1000}m {level_real:4.0%} vs{level_fake:4.0%}  {(time.perf_counter() - rtimer) / (r + .1) * len(rounds):3.0f} s/epoch"
+            bar = f"Epoch {e:2} {image_size:3}px [{'*' * (25 * r // rounds[-1]):25s}] {r:04d}"
+            alp = 4 * " ░▒▓█"[int(alpha * 4)]
+            print(f"\r  {bar} {stats} {alp}", end="\N{ESC}[K")
+            visualize(f"{bar} alpha {alp} »  G:D {stats}", image_size=image_size, alpha=alpha)
+        print(f"\r  Epoch {e:2}/{len(epochs)} {image_size:3}px done   » {stats}", end="\N{ESC}[K\n")
         torch.save({
             "generator": generator.state_dict(),
             "discriminator": discriminator.state_dict(),
         }, f"facegen{e:03}.pth")
-        # After each epoch, reduce generator learning rates
-        for param_group in g_optimizer.param_groups: param_group['lr'] *= 0.8
+        # After each epoch, reduce learning rates
+        for param_group in g_optimizer.param_groups + d_optimizer.param_groups:
+            param_group['lr'] *= 0.8
 
 with visualization.Video(generator, device=device) as visualize:
     training()
