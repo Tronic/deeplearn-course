@@ -11,10 +11,11 @@ import visualization
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 faces = facedata.Torch(device=device)
 
-base_size = 10
-max_size = 160
-discriminator_channels = 64
-generator_channels = 64
+base_size = 10  # px
+max_size = 160  # px
+n_layers = (max_size // base_size).bit_length() - 1  # Discriminator and Generator layer count
+discriminator_channels = 32
+generator_channels = 32
 
 #%% Network definition
 
@@ -36,7 +37,7 @@ class Discriminator(nn.Module):
     def __init__(self, base_size=base_size, channels=discriminator_channels):
         super().__init__()
         self.fromRGB = nn.ConvTranspose2d(3, channels, kernel_size=1)
-        self.conv = nn.ModuleList([DownConvLayer(channels) for i in range(5)])
+        self.conv = nn.ModuleList([DownConvLayer(channels) for i in range(n_layers)])
         self.linear = nn.Sequential(
             nn.Linear(channels * base_size * base_size, 256), nn.LeakyReLU(0.25, inplace=True),
             nn.Linear(256, 128), nn.LeakyReLU(0.25, inplace=True),
@@ -107,7 +108,6 @@ class Generator(nn.Module):
     """Convolutional generator adapted from DCGAN by Radford et al."""
     def __init__(self, base_size=base_size, channels=generator_channels):
         super().__init__()
-        n_layers = 5
         self.channels = channels
         self.base_size = base_size
         self.latimg = nn.Linear(latent.dimension, channels * base_size**2, bias=False)
