@@ -180,9 +180,11 @@ def training():
     zeros = torch.zeros((minibatch_size, 1), device=device)
     criterion = nn.BCEWithLogitsLoss()
     image_size = base_size
-    noise = 0.0
-    alpha = 1.0
+    noise = alpha = 0.0
     for e in epochs:
+        if image_size < max_size:
+            image_size *= 2
+            alpha = 0.0
         images = faces.batch_iter(minibatch_size, image_size=image_size)
         rtimer = time.perf_counter()
         for r in rounds:
@@ -231,8 +233,5 @@ def training():
         }, f"facegen{e:03}.pth")
         for param_group in g_optimizer.param_groups + d_optimizer.param_groups:
             param_group['lr'] *= 0.8
-        if image_size < max_size:
-            image_size *= 2
-            alpha = 0.0
 with visualization.Video(generator, device=device) as visualize:
     training()
