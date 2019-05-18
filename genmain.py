@@ -11,11 +11,17 @@ torch.random.manual_seed(0)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 faces = facedata.Torch(device=device)
 
-base_size = 20  # px
-max_size = 160  # px
-n_layers = (max_size // base_size).bit_length() - 1  # Discriminator and Generator layer count
+# Network settings
 discriminator_channels = 128
 generator_channels = 32
+n_layers = 4
+max_size = 160  # px
+base_size = max_size >> n_layers
+
+# Training settings
+epochs = range(6)
+rounds = range(3000 if device.type == "cuda" else 10)
+minibatch_size = 16
 
 #%% Network definition
 
@@ -162,23 +168,18 @@ except:
     pass
 
 #%% Training
-minibatch_size = 16
-rounds = range(64000 // minibatch_size if device.type == "cuda" else 10)
-epochs = range(6)
-
-d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=0.0001, betas=(.5, .999))
-g_optimizer = torch.optim.Adam([
-    {"params": generator.latimg.parameters(), "lr": 0.0005},
-    {"params": generator.lat.parameters(), "lr": 0.0005},
-    {"params": generator.upc.parameters(), "lr": 0.00003},
-    {"params": generator.toRGB.parameters(), "lr": 0.001},
-], betas=(.8, .99))
-
 def training():
     print(f"Training with {len(rounds)} rounds per epoch:")
     ones = torch.ones((minibatch_size, 1), device=device)
     zeros = torch.zeros((minibatch_size, 1), device=device)
     criterion = nn.BCEWithLogitsLoss()
+    d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=0.0001, betas=(.5, .999))
+    g_optimizer = torch.optim.Adam([
+        {"params": generator.latimg.parameters(), "lr": 0.0005},
+        {"params": generator.lat.parameters(), "lr": 0.0005},
+        {"params": generator.upc.parameters(), "lr": 0.00003},
+        {"params": generator.toRGB.parameters(), "lr": 0.001},
+    ], betas=(.8, .99))
     image_size = base_size
     noise = alpha = 0.0
     for e in epochs:
@@ -233,5 +234,6 @@ def training():
         }, f"facegen{e:03}.pth")
         for param_group in g_optimizer.param_groups + d_optimizer.param_groups:
             param_group['lr'] *= 0.8
+
 with visualization.Video(generator, device=device) as visualize:
     training()
