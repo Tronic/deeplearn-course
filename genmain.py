@@ -24,8 +24,8 @@ class DownConvLayer(nn.Module):
     def __init__(self, channels):
         super().__init__()
         self.seq = nn.Sequential(
-#            nn.Conv2d(channels, channels, kernel_size=5, padding=2), nn.LeakyReLU(0.25, inplace=True),
-            nn.Conv2d(channels, channels, kernel_size=5, padding=2), nn.MaxPool2d(2), nn.LeakyReLU(0.25, inplace=True),
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1), nn.LeakyReLU(0.25, inplace=True),
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1), nn.MaxPool2d(2), nn.LeakyReLU(0.25, inplace=True),
         )
 
     def forward(self, x):
@@ -68,8 +68,8 @@ class UpConvLayer(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
         self.seq = nn.Sequential(
-            nn.ConvTranspose2d(in_channels, out_channels, kernel_size=5, padding=2, bias=False), nn.Tanh(),
-#            nn.ConvTranspose2d(out_channels, out_channels, kernel_size=5, padding=2, bias=False), nn.Tanh(),
+            nn.ConvTranspose2d(in_channels, out_channels, kernel_size=3, padding=1, bias=False), nn.ReLU(),
+            nn.ConvTranspose2d(out_channels, out_channels, kernel_size=3, padding=1, bias=False), nn.Tanh(),
         )
 
     def forward(self, x):
@@ -161,9 +161,9 @@ except:
     pass
 
 #%% Training
-minibatch_size = 32
+minibatch_size = 16
 rounds = range(64000 // minibatch_size if device.type == "cuda" else 10)
-epochs = range(100)
+epochs = range(6)
 
 d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=0.0003, betas=(.5, .999))
 g_optimizer = torch.optim.Adam([
@@ -177,14 +177,13 @@ def training():
     print(f"Training with {len(rounds)} rounds per epoch:")
     ones = torch.ones((minibatch_size, 1), device=device)
     zeros = torch.zeros((minibatch_size, 1), device=device)
-    level_real = level_fake = 0.5
     criterion = nn.BCEWithLogitsLoss()
     isize = base_size
     for e in epochs:
-        d_rounds = g_rounds = 0
-        rtimer = time.perf_counter()
         if isize < image_size: isize *= 2
         images = faces.batch_iter(minibatch_size, image_size=isize)
+        d_rounds = g_rounds = 0
+        rtimer = time.perf_counter()
         for r in rounds:
             alpha = min(1.0, 4 * r / len(rounds))  # Alpha blending after switching to bigger resolution
             # Make a set of fakes
@@ -215,13 +214,17 @@ def training():
                     output_fake.detach()
                 ])).view(2, minibatch_size).mean(dim=1).cpu().numpy()
                 level_diff = level_real - level_fake
-                stats = f"{g_rounds:04d}:{d_rounds:04d}  {level_real:4.0%} vs{level_fake:4.0%}  {(time.perf_counter() - rtimer) / (r + .1) * len(rounds):3.0f} s/epoch"
+                glr = g_optimizer.param_groups[0]['lr']
+                dlr = d_optimizer.param_groups[0]['lr']
+                stats = f"{g_rounds:04d}:{d_rounds:04d}  lr={glr*1e6:03.0f}:{dlr*1e6:03.0f}µ {level_real:4.0%} vs{level_fake:4.0%}  {(time.perf_counter() - rtimer) / (r + .1) * len(rounds):3.0f} s/epoch"
                 bar = f"[{'*' * (25 * r // rounds[-1]):25s}]"
                 alp = 4 * " ░▒▓█"[int(alpha * 4)]
                 print(f"\r  {bar} {stats} {alp}", end="\N{ESC}[K")
                 if level_diff > 0.2: break  # Good enough
-            if level_diff > 0.7:
-                for param_group in d_optimizer.param_groups: param_group['lr'] *= 0.9
+                #for param_group in d_optimizer.param_groups: param_group['lr'] *= 1.1
+            if level_diff > 0.99:
+                for param_group in d_optimizer.param_groups: param_group['lr'] *= 0.99
+
             visualize(f"{isize:3}px {bar} alpha {alp} »  G:D {stats}", image_size=isize, alpha=alpha)
         print(f"\r  Epoch {e:2}/{len(epochs)} {isize:3}px done   » {stats}", end="\N{ESC}[K\n")
         torch.save({
