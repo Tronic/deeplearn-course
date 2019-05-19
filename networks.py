@@ -114,8 +114,9 @@ class Generator(nn.Module):
         #x = self.latimg(latent).view(-1, self.channels, self.base_size, self.base_size)
         lat_full = self.inject(latent)
         for i, upconv in enumerate(self.upc):
-            if x.size(2) >= image_size: break
-            lat = nn.functional.interpolate(lat_full, x.size(2))
+            size = base_size << i
+            if size >= image_size: break
+            lat = nn.functional.interpolate(lat_full, size)
             if "x" not in locals(): x = lat
             x_prev, x = x, upconv(torch.cat((x, lat), dim=1))
         # Minimize correlation between samples
