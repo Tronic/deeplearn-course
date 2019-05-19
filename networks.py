@@ -91,7 +91,10 @@ class ToRGB(nn.Module):
     """Convert channels into colors."""
     def __init__(self, ch):
         super().__init__()
-        self.seq = nn.Sequential(nn.Sigmoid(), nn.ConvTranspose2d(ch, 3, kernel_size=1), nn.Tanh())
+        self.seq = nn.Sequential(
+            nn.ConvTranspose2d(ch, ch, kernel_size=1), nn.Tanh(),
+            nn.ConvTranspose2d(ch, 3, kernel_size=1), nn.Tanh(),
+        )
 
     def forward(self, x):
         return self.seq(x)
