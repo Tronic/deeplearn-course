@@ -111,10 +111,11 @@ class Generator(nn.Module):
         self.toRGB = ToRGB(channels)  # Map channels to colors
 
     def forward(self, latent, image_size=max_size, alpha=1, diversify=0):
-        #x = self.latimg(latent).view(-1, self.channels, self.base_size, self.base_size)
+        x = 0 * self.latimg(latent).view(-1, self.channels, self.base_size, self.base_size)
         lat_full = self.inject(latent)
+        size = base_size
         for i, upconv in enumerate(self.upc):
-            size = base_size << i
+            size *= 2
             if size >= image_size: break
             lat = nn.functional.interpolate(lat_full, size)
             if "x" not in locals(): x = lat
