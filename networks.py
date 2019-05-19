@@ -71,6 +71,7 @@ class UpConvLayer(nn.Module):
 
 
 class Inject(nn.Module):
+    """Add non-spatial latent information and x/y coordinates as an injection layer to Generator."""
     def __init__(self, image_size, channels=latent.dimension):
         super().__init__()
         self.image_size = image_size
