@@ -110,7 +110,7 @@ class Generator(nn.Module):
         self.upc = nn.ModuleList([UpConvLayer(2 * channels, channels) for i in range(n_layers)])
         self.toRGB = ToRGB(channels)  # Map channels to colors
 
-    def forward(self, latent, image_size=max_size, alpha=1, train=False):
+    def forward(self, latent, image_size=max_size, alpha=1, diversify=0):
         x = self.latimg(latent).view(-1, self.channels, self.base_size, self.base_size)
         lat_full = self.lat(latent)
         for i, upconv in enumerate(self.upc):
@@ -118,11 +118,11 @@ class Generator(nn.Module):
             lat = nn.functional.interpolate(lat_full, x.size(2))
             x_prev, x = x, upconv(torch.cat((x, lat), dim=1))
         # Minimize correlation between samples
-        if train:
+        if diversify:
             with torch.no_grad():
                 g = torch.cat((x[1:], x[0:1]), dim=0) - x
                 g = g.sign() * .05 * (1.05 / (g**2 + .05) - 1)
-                x.backward(100.0 * alpha / g.numel() * g, retain_graph=True)
+                x.backward(alpha * diversify / g.numel() * g, retain_graph=True)
                 del g
         # Alpha blending between the last two layers
         if alpha < 1 and "x_prev" in locals():
