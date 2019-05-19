@@ -61,7 +61,7 @@ def training():
             # Make a set of fakes
             z = latent.random(minibatch_size, device=device)
             g_optimizer.zero_grad()
-            fake = generator(z, image_size=image_size, alpha=alpha, diversify=1000.0)
+            fake = generator(z, image_size=image_size, alpha=alpha, diversify=100.0)
             # Train the generator
             criterion(discriminator(fake, alpha), ones).backward()
             g_optimizer.step()

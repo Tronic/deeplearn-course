@@ -62,7 +62,7 @@ class UpConvLayer(nn.Module):
         super().__init__()
         self.seq = nn.Sequential(
             nn.ConvTranspose2d(in_channels, out_channels, kernel_size=3, padding=1, bias=False), nn.Tanh(),
-            nn.ConvTranspose2d(out_channels, out_channels, kernel_size=3, padding=1, bias=False), nn.Tanh(),
+            nn.ConvTranspose2d(out_channels, out_channels, kernel_size=5, padding=2, bias=False), nn.Tanh(),
         )
 
     def forward(self, x):
@@ -106,7 +106,7 @@ class Generator(nn.Module):
         self.channels = channels
         self.base_size = base_size
         self.latimg = nn.Linear(latent.dimension, channels * base_size**2, bias=False)
-        self.inject = Inject(image_size=base_size << n_layers, channels=channels)
+        self.inject = Inject(image_size=base_size << (n_layers - 1), channels=channels)
         self.upc = nn.ModuleList([UpConvLayer(2 * channels, channels) for i in range(n_layers)])
         self.toRGB = ToRGB(channels)  # Map channels to colors
 
