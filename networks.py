@@ -113,9 +113,8 @@ class Generator(nn.Module):
     def forward(self, latent, image_size=max_size, alpha=1, diversify=0):
         x = 0 * self.latimg(latent).view(-1, self.channels, self.base_size, self.base_size)
         lat_full = self.inject(latent)
-        size = base_size
         for i, upconv in enumerate(self.upc):
-            size *= 2
+            size = base_size << i
             if size >= image_size: break
             lat = nn.functional.interpolate(lat_full, size)
             x_prev, x = x, upconv(torch.cat((x, lat), dim=1))
