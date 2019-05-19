@@ -118,7 +118,6 @@ class Generator(nn.Module):
             size *= 2
             if size >= image_size: break
             lat = nn.functional.interpolate(lat_full, size)
-            if "x" not in locals(): x = lat
             x_prev, x = x, upconv(torch.cat((x, lat), dim=1))
         # Minimize correlation between samples
         if diversify:
