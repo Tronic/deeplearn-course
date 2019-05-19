@@ -70,7 +70,7 @@ class UpConvLayer(nn.Module):
         return self.seq(x)
 
 
-class LatentIn(nn.Module):
+class Inject(nn.Module):
     def __init__(self, image_size, channels=latent.dimension):
         super().__init__()
         self.image_size = image_size
@@ -106,13 +106,13 @@ class Generator(nn.Module):
         self.channels = channels
         self.base_size = base_size
         self.latimg = nn.Linear(latent.dimension, channels * base_size**2, bias=False)
-        self.lat = LatentIn(image_size=base_size << n_layers, channels=channels)
+        self.inject = Inject(image_size=base_size << n_layers, channels=channels)
         self.upc = nn.ModuleList([UpConvLayer(2 * channels, channels) for i in range(n_layers)])
         self.toRGB = ToRGB(channels)  # Map channels to colors
 
     def forward(self, latent, image_size=max_size, alpha=1, diversify=0):
         x = self.latimg(latent).view(-1, self.channels, self.base_size, self.base_size)
-        lat_full = self.lat(latent)
+        lat_full = self.inject(latent)
         for i, upconv in enumerate(self.upc):
             if x.size(2) >= image_size: break
             lat = nn.functional.interpolate(lat_full, x.size(2))
