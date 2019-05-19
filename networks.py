@@ -111,11 +111,12 @@ class Generator(nn.Module):
         self.toRGB = ToRGB(channels)  # Map channels to colors
 
     def forward(self, latent, image_size=max_size, alpha=1, diversify=0):
-        x = self.latimg(latent).view(-1, self.channels, self.base_size, self.base_size)
+        #x = self.latimg(latent).view(-1, self.channels, self.base_size, self.base_size)
         lat_full = self.inject(latent)
         for i, upconv in enumerate(self.upc):
             if x.size(2) >= image_size: break
             lat = nn.functional.interpolate(lat_full, x.size(2))
+            if "x" not in locals(): x = lat
             x_prev, x = x, upconv(torch.cat((x, lat), dim=1))
         # Minimize correlation between samples
         if diversify:
